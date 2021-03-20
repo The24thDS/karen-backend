@@ -1,18 +1,10 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Param,
-  Post,
-  Put,
-  UploadedFiles,
-  UseGuards,
-  UseInterceptors,
-} from '@nestjs/common';
-import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { multerOptions } from 'src/utils/multer-options';
+
+import {
+    Body, Controller, Delete, Get, Param, Post, Put, UploadedFiles, UseGuards, UseInterceptors
+} from '@nestjs/common';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
 
 import { CreateModelDto } from './dto/create-model.dto';
 import { UpdateModelDto } from './dto/update-model.dto';

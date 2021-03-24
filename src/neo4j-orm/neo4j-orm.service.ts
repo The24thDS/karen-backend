@@ -28,13 +28,14 @@ export class Neo4jOrmService {
     returnProps?: string[],
   ): Promise<any> {
     const labelProperties = this.mapProps(queryProps);
-    let query = `MATCH (n:${label} {${labelProperties.join(', ')}}) return `;
+    let query = `MATCH (n:${label} {${labelProperties.join(', ')}}) RETURN `;
     if (returnProps?.length) {
       const returnProperties = returnProps.map((p) => `n.${p}`).join(', ');
       query += returnProperties;
     } else {
       query += 'n';
     }
+    query += ' LIMIT 1';
     return await this.executeOneEntityQuery(query, queryProps);
   }
 

@@ -37,13 +37,13 @@ export class ModelsController {
     @Body() createModelDto: CreateModelDto,
     @UploadedFiles() files: any,
   ) {
-    const modelFilesPaths = files['models'].map((file) => file.path);
-    const modelImagesPaths = files['images'].map((file) => file.path);
+    const modelFilesNames = files['models'].map((file) => file.filename);
+    const modelImagesNames = files['images'].map((file) => file.filename);
     return this.modelsService.create(
       req.user.id,
       createModelDto,
-      modelFilesPaths,
-      modelImagesPaths,
+      modelFilesNames,
+      modelImagesNames,
     );
   }
 

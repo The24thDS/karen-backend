@@ -47,7 +47,7 @@ export class ModelsService {
       'TAGGED_WITH',
       '>',
     );
-    return res;
+    return { id: res.id };
   }
 
   async findAll(): Promise<any> {

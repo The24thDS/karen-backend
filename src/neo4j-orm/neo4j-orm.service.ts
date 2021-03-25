@@ -39,6 +39,22 @@ export class Neo4jOrmService {
     return await this.executeOneEntityQuery(query, queryProps);
   }
 
+  async findAll(
+    label: string,
+    queryProps: {} = {},
+    returnProps?: string[],
+  ): Promise<any> {
+    const labelProperties = this.mapProps(queryProps);
+    let query = `MATCH (n:${label} {${labelProperties.join(', ')}}) RETURN `;
+    if (returnProps?.length) {
+      const returnProperties = returnProps.map((p) => `n.${p}`).join(', ');
+      query += returnProperties;
+    } else {
+      query += 'n';
+    }
+    return await this.executeMultipleEntitiesQuery(query, queryProps);
+  }
+
   /**
    * Connects an existing node N to other nodes M. If it can't find a node M with the given props it will create one.
    * @param nLabel A capitalized string representing the label of the main node
@@ -82,9 +98,8 @@ export class Neo4jOrmService {
     }
   }
 
-  private parseOneResponse(res: any) {
-    const { records } = res;
-    const entityProperties = records[0].get('n').properties;
+  private parseOneRecord(record: any) {
+    const entityProperties = record.get('n').properties;
     this.excludedProperties.forEach((p) => delete entityProperties[p]);
     return entityProperties;
   }
@@ -100,7 +115,16 @@ export class Neo4jOrmService {
   private async executeOneEntityQuery(query: string, props: any) {
     try {
       const res = await this.neo4jService.write(query, props);
-      return this.parseOneResponse(res);
+      return this.parseOneRecord(res.records[0]);
+    } catch (e) {
+      throw new Error(e);
+    }
+  }
+
+  private async executeMultipleEntitiesQuery(query: string, props: any) {
+    try {
+      const res = await this.neo4jService.write(query, props);
+      return res.records.map((r) => this.parseOneRecord(r));
     } catch (e) {
       throw new Error(e);
     }

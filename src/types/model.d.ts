@@ -3,7 +3,9 @@ import Tag from './tag';
 interface Model {
   name: string;
   id: string;
-  tags: Tag[];
+  tags?: Tag[];
+  images: string[];
+  files: string[];
 }
 
 export default Model;

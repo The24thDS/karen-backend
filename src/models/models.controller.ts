@@ -1,3 +1,4 @@
+import Model from 'src/types/model';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { multerOptions } from 'src/utils/multer-options';
 
@@ -37,6 +38,7 @@ export class ModelsController {
     @Body() createModelDto: CreateModelDto,
     @UploadedFiles() files: any,
   ) {
+    console.log(files['models']);
     const modelFilesNames = files['models'].map((file) => file.filename);
     const modelImagesNames = files['images'].map((file) => file.filename);
     return this.modelsService.create(
@@ -48,8 +50,14 @@ export class ModelsController {
   }
 
   @Get()
-  findAll() {
-    return this.modelsService.findAll();
+  async findAll() {
+    const models = await this.modelsService.findAll();
+    const strippedModels = models.map((m: Model) => ({
+      id: m.id,
+      name: m.name,
+      image: m.images[0],
+    }));
+    return strippedModels;
   }
 
   @Get(':id')

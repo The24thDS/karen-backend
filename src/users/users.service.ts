@@ -21,7 +21,8 @@ export class UsersService {
         id,
         password: hashedPassword,
       });
-      return res;
+      const { password, ...rest } = res;
+      return rest;
     } catch (e) {
       console.log(e);
       if (e.message.includes('already exists')) {

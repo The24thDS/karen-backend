@@ -54,7 +54,7 @@ export class ModelsService {
     const res = await this.neo4jService.read(
       'MATCH (model:Model) return model',
     );
-    return { count: res.records.length, records: ParseModels(res.records) };
+    return ParseModels(res.records);
   }
 
   async findOne(id: string, returnTags: boolean): Promise<any> {

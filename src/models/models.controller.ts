@@ -53,12 +53,7 @@ export class ModelsController {
   @Get()
   async findAll() {
     const models = await this.modelsService.findAll();
-    const strippedModels = models.map((m: Model) => ({
-      id: m.id,
-      name: m.name,
-      image: m.images[0],
-    }));
-    return strippedModels;
+    return models;
   }
 
   @Post('/search')
@@ -71,7 +66,7 @@ export class ModelsController {
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.modelsService.findOne(id, true);
+    return this.modelsService.findOneWithUserAndTags(id);
   }
 
   @UseGuards(JwtAuthGuard)

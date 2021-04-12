@@ -8,6 +8,8 @@ import { Injectable } from '@nestjs/common';
 import { Neo4jOrmService } from '../neo4j-orm/neo4j-orm.service';
 import { CreateModelDto } from './dto/create-model.dto';
 import { UpdateModelDto } from './dto/update-model.dto';
+import SourceNode from 'src/types/source-node';
+import WithNode from 'src/types/with-node';
 
 @Injectable()
 export class ModelsService {
@@ -51,10 +53,12 @@ export class ModelsService {
   }
 
   async findAll(): Promise<any> {
-    const res = await this.neo4jService.read(
-      'MATCH (model:Model) return model',
-    );
-    return ParseModels(res.records);
+    const res = await this.neo4jOrm.findAll('Model', {}, [
+      'id',
+      'name',
+      'images[0]',
+    ]);
+    return res;
   }
 
   async findBySearchTerm(searchTerm: string): Promise<any> {
@@ -66,15 +70,36 @@ export class ModelsService {
     return response;
   }
 
-  async findOne(id: string, returnTags: boolean): Promise<any> {
-    const res = await this.neo4jService.read(
-      `MATCH (model:Model {id: $id})${
-        returnTags ? '-->(tag:Tag)' : ''
-      } return model${returnTags ? ', tag' : ''}`,
-      { id },
-    );
-    const parsedModel: Model = ParseModel(res.records);
-    return parsedModel;
+  async findOneWithUserAndTags(id: string): Promise<any> {
+    const sourceNode: SourceNode = { label: 'Model', queryProps: { id } };
+    const withNodes: WithNode[] = [
+      {
+        label: 'User',
+        relation: { direction: 'towards-source', label: 'UPLOADED' },
+        returnProps: ['id', 'email'],
+      },
+      {
+        label: 'Tag',
+        relation: { direction: 'from-source', label: 'TAGGED_WITH' },
+        returnProps: ['name'],
+      },
+    ];
+    const results = await this.neo4jOrm.findOneWith(sourceNode, withNodes);
+    const response = {
+      model: {
+        id: results[0].id,
+        name: results[0].name,
+        description: results[0].description,
+        images: results[0].images,
+        files: results[0].files,
+      },
+      user: {
+        id: results[0].u.id,
+        email: results[0].u.email,
+      },
+      tags: results.map((record) => record.t.name),
+    };
+    return response;
   }
 
   update(id: string, updateModelDto: UpdateModelDto) {

@@ -57,6 +57,15 @@ export class ModelsService {
     return ParseModels(res.records);
   }
 
+  async findBySearchTerm(searchTerm: string): Promise<any> {
+    const response = await this.neo4jOrm.fullTextQuery(
+      'modelNamesAndDescriptions',
+      searchTerm,
+      ['id', 'name', 'images[0]'],
+    );
+    return response;
+  }
+
   async findOne(id: string, returnTags: boolean): Promise<any> {
     const res = await this.neo4jService.read(
       `MATCH (model:Model {id: $id})${

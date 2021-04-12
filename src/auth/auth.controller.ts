@@ -1,3 +1,4 @@
+import { JwtAuthGuard } from './jwt-auth.guard';
 import {
   Body,
   Controller,
@@ -5,6 +6,7 @@ import {
   Post,
   Request,
   UseGuards,
+  Get,
 } from '@nestjs/common';
 
 import { CreateUserDto } from '../users/dto/crease-user.dto';
@@ -29,5 +31,12 @@ export class AuthController {
   @Post('login')
   async login(@Request() req) {
     return this.authService.login(req.user);
+  }
+
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard)
+  @Get('check-token')
+  async checkToken(@Request() req) {
+    return { valid: true, user: req.user };
   }
 }

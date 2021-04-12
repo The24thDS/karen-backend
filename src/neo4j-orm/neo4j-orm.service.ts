@@ -55,6 +55,42 @@ export class Neo4jOrmService {
     return await this.executeMultipleEntitiesQuery(query, queryProps);
   }
 
+  async containsQuery(
+    label: string,
+    prop: string,
+    valueToContain: string,
+    queryProps: any = {},
+    returnProps?: string[],
+  ) {
+    const labelProperties = this.mapProps(queryProps);
+    const whereClause = `where n.${prop} contains '${valueToContain}'`;
+    let query = `MATCH (n:${label} {${labelProperties.join(
+      ', ',
+    )}}) ${whereClause} RETURN `;
+    if (returnProps?.length) {
+      const returnProperties = returnProps.map((p) => `n.${p}`).join(', ');
+      query += returnProperties;
+    } else {
+      query += 'n';
+    }
+    return await this.executeMultipleEntitiesQuery(query, queryProps);
+  }
+
+  async fullTextQuery(
+    indexName: string,
+    queryValue: string,
+    returnProps?: string[],
+  ) {
+    let query = `CALL db.index.fulltext.queryNodes("${indexName}", "${queryValue}") YIELD node RETURN `;
+    if (returnProps?.length) {
+      const returnProperties = returnProps.map((p) => `node.${p}`).join(', ');
+      query += returnProperties;
+    } else {
+      query += 'node';
+    }
+    return await this.executeMultipleEntitiesQuery(query, {});
+  }
+
   /**
    * Connects an existing node N to other nodes M. If it can't find a node M with the given props it will create one.
    * @param nLabel A capitalized string representing the label of the main node
@@ -99,9 +135,18 @@ export class Neo4jOrmService {
   }
 
   private parseOneRecord(record: any) {
-    const entityProperties = record.get('n').properties;
-    this.excludedProperties.forEach((p) => delete entityProperties[p]);
-    return entityProperties;
+    let response = {};
+    record.keys.forEach((key) => {
+      const value = record.get(key);
+      if (typeof value === 'object') {
+        const entityProperties = value.properties;
+        this.excludedProperties.forEach((p) => delete entityProperties[p]);
+        response = entityProperties;
+      } else {
+        response[key.slice(key.indexOf('.') + 1)] = value;
+      }
+    });
+    return response;
   }
 
   private mapProps(queryProps: any): string[] {

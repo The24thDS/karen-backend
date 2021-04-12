@@ -20,6 +20,7 @@ import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { CreateModelDto } from './dto/create-model.dto';
 import { UpdateModelDto } from './dto/update-model.dto';
 import { ModelsService } from './models.service';
+import { SearchModelDto } from './dto/search-model-dto';
 
 @Controller('models')
 export class ModelsController {
@@ -58,6 +59,14 @@ export class ModelsController {
       image: m.images[0],
     }));
     return strippedModels;
+  }
+
+  @Post('/search')
+  async findFromSearch(@Body() searchModelsDto: SearchModelDto) {
+    const models = await this.modelsService.findBySearchTerm(
+      searchModelsDto.searchString,
+    );
+    return models;
   }
 
   @Get(':id')

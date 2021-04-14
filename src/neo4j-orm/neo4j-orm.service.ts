@@ -1,7 +1,7 @@
 import { Neo4jService } from 'nest-neo4j/dist';
 
 import { Injectable } from '@nestjs/common';
-import SourceNode from 'src/types/source-node';
+import SourceNode, { ReturnProp } from 'src/types/source-node';
 import WithNode from 'src/types/with-node';
 
 @Injectable()
@@ -65,8 +65,9 @@ export class Neo4jOrmService {
       const queryProps = node.queryProps
         ? this.mapPropsWithValues(node.queryProps)
         : [];
-      const returnProps =
-        node.returnProps?.map((p) => `${key}.${p}`).join(', ') ?? key;
+      const returnProps = node.returnProps
+        ? this.mapReturnProps(node.returnProps, key).join(', ')
+        : key;
       return {
         query: `(${keys[0]})${relation}(${key}:${node.label} {${queryProps.join(
           ', ',
@@ -78,30 +79,47 @@ export class Neo4jOrmService {
     const sourceNodeQuery = `(${keys[0]}:${
       sourceNode.label
     } {${sourceNodeQueryProps.join(', ')}})`;
-    const sourceNodeReturnProps =
-      sourceNode.returnProps?.map((p) => `${keys[0]}.${p}`).join(', ') ??
-      keys[0];
+    const sourceNodeReturnProps = sourceNode.returnProps
+      ? this.mapReturnProps(sourceNode.returnProps, keys[0])
+      : keys[0];
     const query = `MATCH ${sourceNodeQuery}, ${withNodesQueryObjects
       .map((q) => q.query)
       .join(', ')} RETURN ${sourceNodeReturnProps}, ${withNodesQueryObjects
       .map((q) => q.returnProps)
       .join(', ')}`;
-    return await this.executeMultipleEntitiesQuery(query, {});
+    console.log(query);
+    return await this.executeOneEntityQuery(query, {});
+  }
+
+  private mapReturnProps(returnProps: string[] | ReturnProp[], key: string) {
+    return returnProps.map((p: string | ReturnProp) => {
+      if (typeof p === 'string') {
+        return `${key}.${p}`;
+      } else {
+        let rp = `${key}.${p.propName}`;
+        if (p.aggregateFunction) {
+          rp = `${p.aggregateFunction}(${rp})`;
+        }
+        if (p.alias) {
+          rp += ` as ${p.alias}`;
+        }
+        return rp;
+      }
+    });
   }
 
   async findAll(
     label: string,
     queryProps: {} = {},
-    returnProps?: string[],
+    returnProps?: string[] | ReturnProp[],
   ): Promise<any> {
     const labelProperties = this.mapProps(queryProps);
     let query = `MATCH (n:${label} {${labelProperties.join(', ')}}) RETURN `;
-    if (returnProps?.length) {
-      const returnProperties = returnProps.map((p) => `n.${p}`).join(', ');
-      query += returnProperties;
-    } else {
-      query += 'n';
-    }
+    const returnProperties = returnProps?.length
+      ? this.mapReturnProps(returnProps, 'n')
+      : 'n';
+    query += returnProperties;
+    console.log(query);
     return await this.executeMultipleEntitiesQuery(query, queryProps);
   }
 
@@ -129,15 +147,13 @@ export class Neo4jOrmService {
   async fullTextQuery(
     indexName: string,
     queryValue: string,
-    returnProps?: string[],
+    returnProps?: string[] | ReturnProp[],
   ) {
     let query = `CALL db.index.fulltext.queryNodes("${indexName}", "${queryValue}") YIELD node RETURN `;
-    if (returnProps?.length) {
-      const returnProperties = returnProps.map((p) => `node.${p}`).join(', ');
-      query += returnProperties;
-    } else {
-      query += 'node';
-    }
+    const returnProperties = returnProps?.length
+      ? this.mapReturnProps(returnProps, 'node')
+      : 'node';
+    query += returnProperties;
     return await this.executeMultipleEntitiesQuery(query, {});
   }
 
@@ -188,7 +204,12 @@ export class Neo4jOrmService {
     let response = {};
     record.keys.forEach((key) => {
       const value = record.get(key);
-      if (typeof value === 'object') {
+      if (
+        value instanceof Array ||
+        (typeof value === 'string' && !key.includes('.'))
+      ) {
+        response[key] = value;
+      } else if (typeof value === 'object') {
         const entityProperties = value.properties;
         this.excludedProperties.forEach((p) => delete entityProperties[p]);
         response = entityProperties;

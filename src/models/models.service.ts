@@ -54,9 +54,9 @@ export class ModelsService {
 
   async findAll(): Promise<any> {
     const res = await this.neo4jOrm.findAll('Model', {}, [
-      'id',
-      'name',
-      'images[0]',
+      { propName: 'id', alias: 'id' },
+      { propName: 'name', alias: 'name' },
+      { propName: 'images[0]', alias: 'image' },
     ]);
     return res;
   }
@@ -65,7 +65,11 @@ export class ModelsService {
     const response = await this.neo4jOrm.fullTextQuery(
       'modelNamesAndDescriptions',
       searchTerm,
-      ['id', 'name', 'images[0]'],
+      [
+        { propName: 'id', alias: 'id' },
+        { propName: 'name', alias: 'name' },
+        { propName: 'images[0]', alias: 'image' },
+      ],
     );
     return response;
   }
@@ -81,23 +85,29 @@ export class ModelsService {
       {
         label: 'Tag',
         relation: { direction: 'from-source', label: 'TAGGED_WITH' },
-        returnProps: ['name'],
+        returnProps: [
+          {
+            propName: 'name',
+            alias: 'tags',
+            aggregateFunction: 'collect',
+          },
+        ],
       },
     ];
-    const results = await this.neo4jOrm.findOneWith(sourceNode, withNodes);
+    const result = await this.neo4jOrm.findOneWith(sourceNode, withNodes);
     const response = {
       model: {
-        id: results[0].id,
-        name: results[0].name,
-        description: results[0].description,
-        images: results[0].images,
-        files: results[0].files,
+        id: result.id,
+        name: result.name,
+        description: result.description,
+        images: result.images,
+        files: result.files,
       },
       user: {
-        id: results[0].u.id,
-        email: results[0].u.email,
+        id: result.u.id,
+        email: result.u.email,
       },
-      tags: results.map((record) => record.t.name),
+      tags: result.tags,
     };
     return response;
   }

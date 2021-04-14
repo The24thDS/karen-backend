@@ -24,7 +24,6 @@ export class UsersService {
       const { password, ...rest } = res;
       return rest;
     } catch (e) {
-      console.log(e);
       if (e.message.includes('already exists')) {
         throw new HttpException(
           'An account with this email already exists',

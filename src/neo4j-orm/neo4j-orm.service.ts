@@ -45,7 +45,6 @@ export class Neo4jOrmService {
     sourceNode: SourceNode,
     withNodes: WithNode[],
   ): Promise<any> {
-    console.log(sourceNode, withNodes);
     const keys = [];
     keys.push(sourceNode.label.slice(0, 1).toLowerCase());
     const withNodesQueryObjects = withNodes.map((node) => {
@@ -87,7 +86,6 @@ export class Neo4jOrmService {
       .join(', ')} RETURN ${sourceNodeReturnProps}, ${withNodesQueryObjects
       .map((q) => q.returnProps)
       .join(', ')}`;
-    console.log(query);
     return await this.executeOneEntityQuery(query, {});
   }
 
@@ -119,7 +117,6 @@ export class Neo4jOrmService {
       ? this.mapReturnProps(returnProps, 'n')
       : 'n';
     query += returnProperties;
-    console.log(query);
     return await this.executeMultipleEntitiesQuery(query, queryProps);
   }
 

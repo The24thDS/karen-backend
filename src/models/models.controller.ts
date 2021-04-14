@@ -39,7 +39,6 @@ export class ModelsController {
     @Body() createModelDto: CreateModelDto,
     @UploadedFiles() files: any,
   ) {
-    console.log(files['models']);
     const modelFilesNames = files['models'].map((file) => file.filename);
     const modelImagesNames = files['images'].map((file) => file.filename);
     return this.modelsService.create(

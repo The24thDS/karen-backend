@@ -94,22 +94,32 @@ export class ModelsService {
         ],
       },
     ];
-    const result = await this.neo4jOrm.findOneWith(sourceNode, withNodes);
+    const { tags, u, views, ...rest } = await this.neo4jOrm.findOneWith(
+      sourceNode,
+      withNodes,
+    );
     const response = {
       model: {
-        id: result.id,
-        name: result.name,
-        description: result.description,
-        images: result.images,
-        files: result.files,
+        ...rest,
+        views: views.low,
       },
       user: {
-        id: result.u.id,
-        email: result.u.email,
+        id: u.id,
+        email: u.email,
       },
-      tags: result.tags,
+      tags,
     };
     return response;
+  }
+
+  async incrementViews(id: string): Promise<any> {
+    return this.neo4jOrm.setProperty(
+      'Model',
+      { id },
+      'views',
+      { value: 'n.views+1', isExpression: true },
+      { value: 0, isExpression: false },
+    );
   }
 
   update(id: string, updateModelDto: UpdateModelDto) {

@@ -65,6 +65,7 @@ export class ModelsController {
 
   @Get(':id')
   findOne(@Param('id') id: string) {
+    this.modelsService.incrementViews(id);
     return this.modelsService.findOneWithUserAndTags(id);
   }
 

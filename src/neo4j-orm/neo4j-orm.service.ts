@@ -3,6 +3,7 @@ import { Neo4jService } from 'nest-neo4j/dist';
 import { Injectable } from '@nestjs/common';
 import SourceNode, { ReturnProp } from 'src/types/source-node';
 import WithNode from 'src/types/with-node';
+import PropertyValue from 'src/types/property-value';
 
 @Injectable()
 export class Neo4jOrmService {
@@ -195,6 +196,40 @@ export class Neo4jOrmService {
     } catch (e) {
       throw new Error(e);
     }
+  }
+
+  async setProperty(
+    label: string,
+    queryProps: {},
+    propertyName: string,
+    propertyValue: PropertyValue,
+    defaultPropertyValue: PropertyValue,
+    returnProps?: string[] | ReturnProp[],
+  ) {
+    // match (m:Model {id: "df94606a-b174-41ae-9dc2-4059284c7cdf"})
+    // set (case when m.views is null then m end).views = 0, m.views = m.views+1
+    // return m.id, m.name, m.files, m.images, m.description, m.views
+    const labelProperties = this.mapProps(queryProps);
+    const defaultValue = defaultPropertyValue.isExpression
+      ? defaultPropertyValue.value
+      : typeof defaultPropertyValue.value === 'string'
+      ? `"${defaultPropertyValue.value}"`
+      : defaultPropertyValue.value;
+    const setDefault = `SET (CASE WHEN n.${propertyName} IS NULL THEN n END).${propertyName} = ${defaultValue}`;
+    const newValue = propertyValue.isExpression
+      ? propertyValue.value
+      : typeof propertyValue.value === 'string'
+      ? `"${propertyValue.value}"`
+      : propertyValue.value;
+    const setProperty = `n.${propertyName} = ${newValue}`;
+    let query = `MATCH (n:${label} {${labelProperties.join(
+      ', ',
+    )}}) ${setDefault}, ${setProperty} RETURN `;
+    const returnProperties = returnProps?.length
+      ? this.mapReturnProps(returnProps, 'n')
+      : 'n';
+    query += returnProperties;
+    return this.executeOneEntityQuery(query, queryProps);
   }
 
   private parseOneRecord(record: any) {

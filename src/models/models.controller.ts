@@ -1,4 +1,3 @@
-import Model from 'src/types/model';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { multerOptions } from 'src/utils/multer-options';
 
@@ -30,8 +29,8 @@ export class ModelsController {
   @Post()
   @UseInterceptors(
     FileFieldsInterceptor(
-      [{ name: 'models' }, { name: 'images' }],
-      multerOptions(),
+      [{ name: 'models' }, { name: 'images' }, { name: 'gltf' }],
+      multerOptions(process.env.UPLOAD_DIRECTORY),
     ),
   )
   create(
@@ -39,19 +38,12 @@ export class ModelsController {
     @Body() createModelDto: CreateModelDto,
     @UploadedFiles() files: any,
   ) {
-    const modelFilesNames = files['models'].map((file) => file.filename);
-    const modelImagesNames = files['images'].map((file) => file.filename);
-    return this.modelsService.create(
-      req.user.id,
-      createModelDto,
-      modelFilesNames,
-      modelImagesNames,
-    );
+    return this.modelsService.create(req.user, createModelDto, files);
   }
 
   @Get()
   async findAll() {
-    const models = await this.modelsService.findAll();
+    const models = await this.modelsService.findAllWithUsername();
     return models;
   }
 
@@ -63,10 +55,10 @@ export class ModelsController {
     return models;
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    this.modelsService.incrementViews(id);
-    return this.modelsService.findOneWithUserAndTags(id);
+  @Get(':slug')
+  findOne(@Param('slug') slug: string) {
+    this.modelsService.incrementViews(slug);
+    return this.modelsService.findOneWithUserAndTags(slug);
   }
 
   @UseGuards(JwtAuthGuard)

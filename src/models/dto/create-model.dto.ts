@@ -1,4 +1,4 @@
-import { ArrayNotEmpty, IsNotEmpty } from 'class-validator';
+import { ArrayNotEmpty, IsNotEmpty, IsOptional } from 'class-validator';
 
 export class CreateModelDto {
   @IsNotEmpty()
@@ -9,4 +9,7 @@ export class CreateModelDto {
 
   @ArrayNotEmpty()
   tags: string[];
+
+  @IsOptional()
+  metadata: { [key: string]: string };
 }

@@ -25,6 +25,11 @@ export class InitController {
         throw new UnauthorizedException();
       }
       await this.createUniqueConstraint('User', 'email', 'c_user_email_unique');
+      await this.createUniqueConstraint(
+        'User',
+        'username',
+        'c_user_username_unique',
+      );
       await this.createUniqueConstraint('User', 'id', 'c_user_id_unique');
       await this.createUniqueConstraint('Model', 'id', 'c_model_id_unique');
       return 'OK';

@@ -21,7 +21,7 @@ export class Neo4jOrmService {
     const labelProperties = this.mapProps(props);
     const query = `CREATE (n:${label} {${labelProperties.join(
       ', ',
-    )}}) return n`;
+    )}, created_at: timestamp()}) return n`;
     return await this.executeOneEntityQuery(query, props);
   }
 
@@ -42,52 +42,9 @@ export class Neo4jOrmService {
     return await this.executeOneEntityQuery(query, queryProps);
   }
 
-  async findOneWith(
-    sourceNode: SourceNode,
-    withNodes: WithNode[],
-  ): Promise<any> {
-    const keys = [];
-    keys.push(sourceNode.label.slice(0, 1).toLowerCase());
-    const withNodesQueryObjects = withNodes.map((node) => {
-      let i = 1;
-      let key = node.label.slice(0, i).toLowerCase();
-      while (keys.includes(key)) {
-        key = node.label.slice(0, ++i).toLowerCase();
-      }
-      keys.push(key);
-      const { direction, label: relationLabel } = node.relation;
-      let relation = `-[:${relationLabel}]-`;
-      if (direction === 'from-source') {
-        relation += '>';
-      } else if (direction === 'towards-source') {
-        relation = '<' + relation;
-      }
-      const queryProps = node.queryProps
-        ? this.mapPropsWithValues(node.queryProps)
-        : [];
-      const returnProps = node.returnProps
-        ? this.mapReturnProps(node.returnProps, key).join(', ')
-        : key;
-      return {
-        query: `(${keys[0]})${relation}(${key}:${node.label} {${queryProps.join(
-          ', ',
-        )}})`,
-        returnProps,
-      };
-    });
-    const sourceNodeQueryProps = this.mapPropsWithValues(sourceNode.queryProps);
-    const sourceNodeQuery = `(${keys[0]}:${
-      sourceNode.label
-    } {${sourceNodeQueryProps.join(', ')}})`;
-    const sourceNodeReturnProps = sourceNode.returnProps
-      ? this.mapReturnProps(sourceNode.returnProps, keys[0])
-      : keys[0];
-    const query = `MATCH ${sourceNodeQuery}, ${withNodesQueryObjects
-      .map((q) => q.query)
-      .join(', ')} RETURN ${sourceNodeReturnProps}, ${withNodesQueryObjects
-      .map((q) => q.returnProps)
-      .join(', ')}`;
-    return await this.executeOneEntityQuery(query, {});
+  async findWith(sourceNode: SourceNode, withNodes: WithNode[]): Promise<any> {
+    const query = this.prepareWithQuery(sourceNode, withNodes);
+    return await this.executeMultipleEntitiesQuery(query, {});
   }
 
   private mapReturnProps(returnProps: string[] | ReturnProp[], key: string) {
@@ -206,9 +163,6 @@ export class Neo4jOrmService {
     defaultPropertyValue: PropertyValue,
     returnProps?: string[] | ReturnProp[],
   ) {
-    // match (m:Model {id: "df94606a-b174-41ae-9dc2-4059284c7cdf"})
-    // set (case when m.views is null then m end).views = 0, m.views = m.views+1
-    // return m.id, m.name, m.files, m.images, m.description, m.views
     const labelProperties = this.mapProps(queryProps);
     const defaultValue = defaultPropertyValue.isExpression
       ? defaultPropertyValue.value
@@ -241,6 +195,8 @@ export class Neo4jOrmService {
         (typeof value === 'string' && !key.includes('.'))
       ) {
         response[key] = value;
+      } else if (value === null) {
+        response[key] = value;
       } else if (typeof value === 'object') {
         const entityProperties = value.properties;
         this.excludedProperties.forEach((p) => delete entityProperties[p]);
@@ -261,7 +217,13 @@ export class Neo4jOrmService {
   }
 
   private mapProps(queryProps: any): string[] {
-    return Object.keys(queryProps).map((p) => `${p}: $${p}`);
+    return Object.entries(queryProps).map(([k, v]) => {
+      if (v instanceof Date) {
+        return `${k}: datetime($${k})`;
+      } else {
+        return `${k}: $${k}`;
+      }
+    });
   }
 
   private mapPropsWithValues(queryProps: any): string[] {
@@ -271,6 +233,9 @@ export class Neo4jOrmService {
   private async executeOneEntityQuery(query: string, props: any) {
     try {
       const res = await this.neo4jService.write(query, props);
+      if (res.records.length === 0) {
+        return null;
+      }
       return this.parseOneRecord(res.records[0]);
     } catch (e) {
       throw new Error(e);
@@ -284,5 +249,50 @@ export class Neo4jOrmService {
     } catch (e) {
       throw new Error(e);
     }
+  }
+
+  private prepareWithQuery(sourceNode: SourceNode, withNodes: WithNode[]) {
+    const keys = [];
+    keys.push(sourceNode.label.slice(0, 1).toLowerCase());
+    const withNodesQueryObjects = withNodes.map((node) => {
+      let i = 1;
+      let key = node.label.slice(0, i).toLowerCase();
+      while (keys.includes(key)) {
+        key = node.label.slice(0, ++i).toLowerCase();
+      }
+      keys.push(key);
+      const { direction, label: relationLabel } = node.relation;
+      let relation = `-[:${relationLabel}]-`;
+      if (direction === 'from-source') {
+        relation += '>';
+      } else if (direction === 'towards-source') {
+        relation = '<' + relation;
+      }
+      const queryProps = node.queryProps
+        ? this.mapPropsWithValues(node.queryProps)
+        : [];
+      const returnProps = node.returnProps
+        ? this.mapReturnProps(node.returnProps, key).join(', ')
+        : key;
+      return {
+        query: `(${keys[0]})${relation}(${key}:${node.label} {${queryProps.join(
+          ', ',
+        )}})`,
+        returnProps,
+      };
+    });
+    const sourceNodeQueryProps = this.mapPropsWithValues(sourceNode.queryProps);
+    const sourceNodeQuery = `(${keys[0]}:${
+      sourceNode.label
+    } {${sourceNodeQueryProps.join(', ')}})`;
+    const sourceNodeReturnProps = sourceNode.returnProps
+      ? this.mapReturnProps(sourceNode.returnProps, keys[0])
+      : keys[0];
+    const query = `MATCH ${sourceNodeQuery}, ${withNodesQueryObjects
+      .map((q) => q.query)
+      .join(', ')} RETURN ${sourceNodeReturnProps}, ${withNodesQueryObjects
+      .map((q) => q.returnProps)
+      .join(', ')}`;
+    return query;
   }
 }

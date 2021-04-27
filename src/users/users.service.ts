@@ -26,7 +26,7 @@ export class UsersService {
     } catch (e) {
       if (e.message.includes('already exists')) {
         throw new HttpException(
-          'An account with this email already exists',
+          'An account with this email or username already exists',
           409,
         );
       } else {
@@ -34,9 +34,9 @@ export class UsersService {
       }
     }
   }
-  async findOne(id: string, props?): Promise<User | undefined> {
+  async findOne(props?): Promise<User | undefined> {
     try {
-      const user: User = await this.neo4jOrm.findOne('User', { id, ...props });
+      const user: User = await this.neo4jOrm.findOne('User', props);
       return user;
     } catch (e) {
       return e;

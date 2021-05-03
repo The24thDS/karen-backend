@@ -3,26 +3,25 @@ import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs';
 import slugify from 'slugify';
 const validator = require('gltf-validator');
-import { format } from 'date-fns';
 const bytes = require('bytes');
+import { Query, node, relation } from 'cypher-query-builder';
 
 import { Injectable } from '@nestjs/common';
 
-import { Neo4jOrmService } from '../neo4j-orm/neo4j-orm.service';
 import { CreateModelDto } from './dto/create-model.dto';
 import { UpdateModelDto } from './dto/update-model.dto';
-import User from 'src/types/user';
-import SourceNode from 'src/types/source-node';
-import WithNode from 'src/types/with-node';
-import ModelUploadFiles from 'src/types/model-upload-files';
-import { PathLike } from 'node:fs';
+import { ModelUploadFiles } from './interfaces/files.interface';
+import { formatDate, parseRecord } from 'src/utils/neo4j-utils';
+import {
+  FindOneQueryResponse,
+  FindOneRequestResponse,
+  StrippedModelWithUsername,
+} from './interfaces/model.interfaces';
+import { User } from 'src/users/interfaces/user.interface';
 
 @Injectable()
 export class ModelsService {
-  constructor(
-    private readonly neo4jService: Neo4jService,
-    private readonly neo4jOrm: Neo4jOrmService,
-  ) {}
+  constructor(private readonly neo4jService: Neo4jService) {}
 
   async create(
     user: User,
@@ -179,128 +178,131 @@ export class ModelsService {
       }
     }
     const { tags, ...modelProps } = createModelDto;
-    await this.neo4jOrm.createOne('Model', {
-      ...modelProps,
-      id,
-      slug,
-      files,
-      images,
-      gltf,
-      views: 0,
-      downloads: 0,
-      totalTriangleCount,
-      totalVertexCount,
-    });
-    await this.neo4jOrm.connectNodeToOtherNodes(
-      'User',
-      { id: user.id },
-      'Model',
-      [{ id }],
-      'UPLOADED',
-      '>',
-    );
-    const tagsProps = tags.map((t) => ({ name: t }));
-    await this.neo4jOrm.connectNodeToOtherNodes(
-      'Model',
-      { id },
-      'Tag',
-      tagsProps,
-      'TAGGED_WITH',
-      '>',
-    );
+    const modelCreationQ = new Query()
+      .create([
+        node('model', 'Model', {
+          ...modelProps,
+          id,
+          slug,
+          files,
+          images,
+          gltf,
+          views: 0,
+          downloads: 0,
+          totalTriangleCount,
+          totalVertexCount,
+        }),
+      ])
+      .setVariables({ 'model.created_at': 'timestamp()' })
+      .buildQueryObject();
+    await this.neo4jService.write(modelCreationQ.query, modelCreationQ.params);
+
+    const userModelLinkQ = new Query()
+      .matchNode('user', 'User', { id: user.id })
+      .matchNode('model', 'Model', { id })
+      .create([node('user'), relation('out', '', 'UPLOADED'), node('model')])
+      .buildQueryObject();
+    await this.neo4jService.write(userModelLinkQ.query, userModelLinkQ.params);
+
+    const tagsQuery = new Query()
+      .matchNode('model', 'Model', { id })
+      .with('model')
+      .unwind(tags, 'tagName')
+      .raw('MERGE (tag:Tag {name: tagName})')
+      .merge([node('model'), relation('out', '', 'TAGGED_WITH'), node('tag')])
+      .buildQueryObject();
+    await this.neo4jService.write(tagsQuery.query, tagsQuery.params);
+
     return { slug };
   }
 
-  async findAll(): Promise<any> {
-    const res = await this.neo4jOrm.findAll('Model', {}, [
-      { propName: 'id', alias: 'id' },
-      { propName: 'name', alias: 'name' },
-      { propName: 'images[0]', alias: 'image' },
-    ]);
-    return res;
-  }
-
-  async findAllWithUsername(): Promise<any> {
-    const sourceNode: SourceNode = {
-      label: 'Model',
-      queryProps: {},
-      returnProps: [
-        { propName: 'slug', alias: 'slug' },
-        { propName: 'name', alias: 'name' },
-        { propName: 'images[0]', alias: 'image' },
-      ],
-    };
-    const withNodes: WithNode[] = [
-      {
-        label: 'User',
-        relation: { direction: 'towards-source', label: 'UPLOADED' },
-        returnProps: ['username'],
-      },
-    ];
-    return await this.neo4jOrm.findWith(sourceNode, withNodes);
-  }
-
-  async findBySearchTerm(searchTerm: string): Promise<any> {
-    const response = await this.neo4jOrm.fullTextQuery(
-      'modelNamesAndDescriptions',
-      searchTerm,
-      [
-        { propName: 'id', alias: 'id' },
-        { propName: 'name', alias: 'name' },
-        { propName: 'images[0]', alias: 'image' },
-      ],
+  async findAllWithUsername(): Promise<StrippedModelWithUsername[]> {
+    const q = new Query()
+      .match([
+        node('m', 'Model'),
+        relation('in', '', 'UPLOADED'),
+        node('user', 'User'),
+      ])
+      .return({
+        m: [{ slug: 'slug' }, { name: 'name' }, { 'images[0]': 'image' }],
+        user: ['username'],
+      })
+      .build();
+    const res = await this.neo4jService.read(q);
+    const parsed: StrippedModelWithUsername[] = res.records.map((r) =>
+      parseRecord(r),
     );
-    return response;
+    return parsed;
   }
 
-  async findOneWithUserAndTags(slug: string): Promise<any> {
-    const sourceNode: SourceNode = { label: 'Model', queryProps: { slug } };
-    const withNodes: WithNode[] = [
-      {
-        label: 'User',
-        relation: { direction: 'towards-source', label: 'UPLOADED' },
-        returnProps: ['username'],
-      },
-      {
-        label: 'Tag',
-        relation: { direction: 'from-source', label: 'TAGGED_WITH' },
-        returnProps: [
-          {
-            propName: 'name',
-            alias: 'tags',
-            aggregateFunction: 'collect',
-          },
-        ],
-      },
-    ];
-    const { tags, u, views, created_at, ...rest } = (
-      await this.neo4jOrm.findWith(sourceNode, withNodes)
-    )[0];
-    const response = {
+  async findBySearchTerm(
+    searchTerm: string,
+  ): Promise<StrippedModelWithUsername[]> {
+    const q = new Query()
+      .raw(
+        'CALL db.index.fulltext.queryNodes("modelNamesAndDescriptions", $searchTerm) YIELD node',
+        { searchTerm },
+      )
+      .with('node')
+      .match([
+        node('node'),
+        relation('in', '', 'UPLOADED'),
+        node('user', 'User'),
+      ])
+      .return({
+        'node.slug': 'slug',
+        'node.name': 'name',
+        'node.images[0]': 'image',
+        user: ['username'],
+      })
+      .buildQueryObject();
+    const response = await this.neo4jService.read(q.query, q.params);
+    const result: StrippedModelWithUsername[] = response.records.map((record) =>
+      parseRecord(record),
+    );
+    return result;
+  }
+
+  async findOneWithUserAndTags(slug: string): Promise<FindOneRequestResponse> {
+    const q = new Query()
+      .match([
+        node('user', 'User'),
+        relation('out', '', 'UPLOADED'),
+        node('model', 'Model', { slug }),
+        relation('out', '', 'TAGGED_WITH'),
+        node('tags', 'Tag'),
+      ])
+      .return([
+        'model',
+        {
+          user: ['username'],
+          'collect(tags.name)': 'tags',
+        },
+      ])
+      .buildQueryObject();
+    const response = await this.neo4jService.read(q.query, q.params);
+    const { user, tags, ...rest }: FindOneQueryResponse = parseRecord(
+      response.records[0],
+    );
+    const result: FindOneRequestResponse = {
       model: {
         ...rest,
-        views: Number(views.toString()),
-        created_at: format(
-          Number(created_at.toString()),
-          'dd-MM-yyyy HH:mm:ss xxx',
-        ),
+        created_at: formatDate(rest.created_at),
       },
-      user: {
-        username: u.username,
-      },
+      user,
       tags,
     };
-    return response;
+    return result;
   }
 
   async incrementViews(slug: string): Promise<any> {
-    return this.neo4jOrm.setProperty(
-      'Model',
-      { slug },
-      'views',
-      { value: 'n.views+1', isExpression: true },
-      { value: 0, isExpression: false },
-    );
+    const q = new Query()
+      .match([node('model', 'Model', { slug })])
+      .setVariables({
+        'model.views': 'model.views+1',
+      })
+      .buildQueryObject();
+    await this.neo4jService.write(q.query, q.params);
   }
 
   update(id: string, updateModelDto: UpdateModelDto) {
@@ -315,7 +317,7 @@ export class ModelsService {
     return res;
   }
 
-  private async deleteFiles(files: PathLike[]) {
+  private async deleteFiles(files: fs.PathLike[]) {
     files.forEach((file) => fs.promises.unlink(file));
   }
 }

@@ -7,3 +7,5 @@ export interface User {
   password: string;
   id: string;
 }
+
+export interface UserWithoutPassword extends Omit<User, 'password'> {}

@@ -7,7 +7,6 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { InitModule } from './init/init.module';
 import { ModelsModule } from './models/models.module';
-import { Neo4jOrmModule } from './neo4j-orm/neo4j-orm.module';
 import { TagsModule } from './tags/tags.module';
 import { UsersModule } from './users/users.module';
 import { AssetsModule } from './assets/assets.module';
@@ -26,7 +25,6 @@ import { AssetsModule } from './assets/assets.module';
     AuthModule,
     UsersModule,
     InitModule,
-    Neo4jOrmModule,
     AssetsModule,
   ],
   controllers: [AppController],

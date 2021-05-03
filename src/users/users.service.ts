@@ -50,9 +50,13 @@ export class UsersService {
       .return('user')
       .buildQueryObject();
     try {
-      const response = await this.neo4jService.read(q.query, { ...q.params });
-      const result: User = parseRecord(response.records[0]);
-      return result;
+      const response = await this.neo4jService.read(q.query, q.params);
+      if (response.records.length > 0) {
+        const result: User = parseRecord(response.records[0]);
+        return result;
+      } else {
+        return undefined;
+      }
     } catch (e) {
       return e;
     }

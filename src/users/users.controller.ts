@@ -1,7 +1,6 @@
-import User from 'src/types/user';
-
 import { Controller, Get, Param } from '@nestjs/common';
 
+import { User } from './interfaces/user.interface';
 import { UsersService } from './users.service';
 
 @Controller('users')
@@ -12,7 +11,7 @@ export class UsersController {
 
   @Get(':id')
   async findOne(@Param('id') id: string) {
-    return this.stripExcludedProps(await this.usersService.findOne(id));
+    return this.stripExcludedProps(await this.usersService.findOne({ id }));
   }
 
   private stripExcludedProps(res: User) {

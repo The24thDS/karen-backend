@@ -1,14 +1,16 @@
-import { Controller, Get, Param, Query, Res } from '@nestjs/common';
+import { Controller, Get, Param, Req, Res } from '@nestjs/common';
 
 @Controller('assets')
 export class AssetsController {
-  @Get('images/:name')
+  @Get('images/:modelAuthor/:modelSlug/:name')
   getImage(
+    @Req() req,
     @Param('name') imageName: string,
-    @Query('modelAuthor') modelAuthor: string,
-    @Query('modelSlug') modelSlug: string,
+    @Param('modelAuthor') modelAuthor: string,
+    @Param('modelSlug') modelSlug: string,
     @Res() res,
   ) {
+    console.log(req);
     const modelImagesPath = `${process.env.UPLOAD_DIRECTORY}/${modelAuthor}/${modelSlug}/images`;
     return res.sendFile(imageName, { root: modelImagesPath });
   }
@@ -27,11 +29,11 @@ export class AssetsController {
     return res.sendFile(fileName, { root: modelImagesPath });
   }
 
-  @Get('models/:name')
+  @Get('models/:modelAuthor/:modelSlug/:name')
   getModel(
     @Param('name') fileName: string,
-    @Query('modelAuthor') modelAuthor: string,
-    @Query('modelSlug') modelSlug: string,
+    @Param('modelAuthor') modelAuthor: string,
+    @Param('modelSlug') modelSlug: string,
     @Res() res,
   ) {
     const modelFilesPath = `${process.env.UPLOAD_DIRECTORY}/${modelAuthor}/${modelSlug}/files`;

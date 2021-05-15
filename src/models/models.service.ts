@@ -2,7 +2,6 @@ import { Neo4jService } from 'nest-neo4j/dist';
 import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs';
 import slugify from 'slugify';
-const validator = require('gltf-validator');
 const bytes = require('bytes');
 import { Query, node, relation } from 'cypher-query-builder';
 
@@ -18,181 +17,80 @@ import {
   StrippedModelWithUsername,
 } from './interfaces/model.interfaces';
 import { User } from 'src/users/interfaces/user.interface';
+import { AssetsService } from 'src/assets/assets.service';
 
 @Injectable()
 export class ModelsService {
-  constructor(private readonly neo4jService: Neo4jService) {}
+  constructor(
+    private readonly neo4jService: Neo4jService,
+    private readonly assetsService: AssetsService,
+  ) {}
 
-  async create(
-    user: User,
-    createModelDto: CreateModelDto,
-    uploadedFiles: ModelUploadFiles,
-  ): Promise<any> {
+  async create(user: User, createModelDto: CreateModelDto): Promise<any> {
     const errors = [];
-    const gltfModelFile = uploadedFiles?.gltf?.find((file) =>
-      file.originalname.endsWith('.gltf'),
+    const gltfFile = createModelDto.gltf.find((fileInfo) =>
+      fileInfo.name.endsWith('.gltf'),
     );
-    let totalTriangleCount = 0;
-    let totalVertexCount = 0;
-    if (!uploadedFiles.images || uploadedFiles.images.length === 0) {
-      errors.push('Images are required.');
-    }
-    if (!uploadedFiles.models || uploadedFiles.models.length === 0) {
-      errors.push('Models are required.');
-    }
-    if (
-      !uploadedFiles.gltf ||
-      uploadedFiles.gltf.length === 0 ||
-      !gltfModelFile
-    ) {
-      errors.push('At least a GLTF file is required');
+    if (!gltfFile) {
+      errors.push('A GLTF file is required!');
     }
     if (errors.length) {
-      this.deleteFiles(uploadedFiles.images.map((f) => f.path));
-      this.deleteFiles(uploadedFiles.models.map((f) => f.path));
-      this.deleteFiles(uploadedFiles.gltf.map((f) => f.path));
       return {
         statusCode: 400,
         message: errors,
         error: 'Bad Request',
       };
     }
-    if (gltfModelFile) {
-      const arrayBuffer = await fs.promises.readFile(gltfModelFile.path);
-      const result = await validator.validateBytes(
-        new Uint8Array(arrayBuffer),
-        {
-          externalResourceFunction: (uri) =>
-            new Promise(async (resolve, reject) => {
-              const splitURI = uri.split('/');
-              const resource = uploadedFiles.gltf.find(
-                (file) => file.originalname === splitURI[splitURI.length - 1],
-              );
-              if (resource) {
-                const arrayBuffer = await fs.promises.readFile(resource.path);
-                resolve(new Uint8Array(arrayBuffer));
-              } else {
-                reject(
-                  `${uri} is referenced in the GLTF object but it was not selected by the user.`,
-                );
-              }
-            }),
-        },
-      );
-      if (result.issues.numErrors === 0) {
-        totalTriangleCount = result.info.totalTriangleCount;
-        totalVertexCount = result.info.totalVertexCount;
-      } else {
-        this.deleteFiles(uploadedFiles.images.map((f) => f.path));
-        this.deleteFiles(uploadedFiles.models.map((f) => f.path));
-        this.deleteFiles(uploadedFiles.gltf.map((f) => f.path));
-        const errors = result.issues.messages.map((msgObj) => msgObj.message);
-        if (errors.length) {
-          return {
-            statusCode: 400,
-            message: errors,
-            error: 'Bad Request',
-          };
-        }
-      }
+    const gltfValidationResponse = await this.assetsService.validateGltfPayload(
+      createModelDto.gltf,
+    );
+    if (gltfValidationResponse.errors !== undefined) {
+      return {
+        statusCode: 400,
+        message: gltfValidationResponse.errors,
+        error: 'Bad Request',
+      };
     }
+    const { totalTriangleCount, totalVertexCount } = gltfValidationResponse;
     const id = uuidv4();
     const dirPath = `${process.env.UPLOAD_DIRECTORY}/${user.username}`;
     const slug = `${slugify(createModelDto.name.toLowerCase())}-${id}`;
     const modelPath = `${dirPath}/${slug}`;
-    // create user's dir if it doesn't exist
-    if (!fs.existsSync(dirPath)) {
-      try {
-        await fs.promises.mkdir(dirPath);
-      } catch (error) {
-        console.log(error);
-        this.deleteFiles(uploadedFiles.images.map((f) => f.path));
-        this.deleteFiles(uploadedFiles.models.map((f) => f.path));
-        this.deleteFiles(uploadedFiles.gltf.map((f) => f.path));
-        throw new Error(error.message);
-      }
-    }
-    // create model's directories
-    try {
-      await fs.promises.mkdir(modelPath);
-      await fs.promises.mkdir(`${modelPath}/files`);
-      await fs.promises.mkdir(`${modelPath}/images`);
-      await fs.promises.mkdir(`${modelPath}/gltf`);
-    } catch (error) {
-      console.log(error);
-      this.deleteFiles(uploadedFiles.images.map((f) => f.path));
-      this.deleteFiles(uploadedFiles.models.map((f) => f.path));
-      this.deleteFiles(uploadedFiles.gltf.map((f) => f.path));
-      throw new Error(error.message);
-    }
-    const files = [];
-    const images = [];
-    let gltf = '';
-    // move files
-    for (let i = 0; i < uploadedFiles.models.length; i++) {
-      const file = uploadedFiles.models[i];
-      try {
-        await fs.promises.rename(
-          file.path,
-          `${modelPath}/files/${file.originalname}`,
-        );
-        files.push(
-          JSON.stringify({ name: file.originalname, size: bytes(file.size) }),
-        );
-      } catch (error) {
-        fs.promises.rmdir(modelPath);
-        console.log(error);
-        throw new Error(error.message);
-      }
-    }
-    // move images
-    for (let i = 0; i < uploadedFiles.images.length; i++) {
-      const file = uploadedFiles.images[i];
-      try {
-        await fs.promises.rename(
-          file.path,
-          `${modelPath}/images/${file.originalname}`,
-        );
-        images.push(file.originalname);
-      } catch (error) {
-        fs.promises.rmdir(modelPath);
-        console.log(error);
-        throw new Error(error.message);
-      }
-    }
-    // move gltf
-    for (let i = 0; i < uploadedFiles.gltf.length; i++) {
-      const file = uploadedFiles.gltf[i];
-      try {
-        await fs.promises.rename(
-          file.path,
-          `${modelPath}/gltf/${file.originalname}`,
-        );
-        if (file.originalname.endsWith('.gltf')) {
-          gltf = file.originalname;
-        }
-      } catch (error) {
-        fs.promises.rmdir(modelPath);
-        console.log(error);
-        throw new Error(error.message);
-      }
-    }
-    const { tags, ...modelProps } = createModelDto;
+    const files = (
+      await this.assetsService.moveFiles(
+        createModelDto.models,
+        `${modelPath}/files`,
+      )
+    ).map((file) => JSON.stringify(file));
+    const images = (
+      await this.assetsService.moveFiles(
+        createModelDto.images,
+        `${modelPath}/images`,
+      )
+    ).map((file) => file.name);
+    const gltf = (
+      await this.assetsService.moveFiles(
+        createModelDto.gltf,
+        `${modelPath}/gltf`,
+      )
+    ).find((file) => file.name.endsWith('.gltf')).name;
+    const { tags, models, ...modelProps } = createModelDto;
+    const modelData = {
+      ...modelProps,
+      id,
+      slug,
+      files,
+      images,
+      gltf,
+      views: 0,
+      downloads: 0,
+      totalTriangleCount,
+      totalVertexCount,
+      metadata: JSON.stringify(modelProps.metadata),
+    };
+    console.log(modelData);
     const modelCreationQ = new Query()
-      .create([
-        node('model', 'Model', {
-          ...modelProps,
-          id,
-          slug,
-          files,
-          images,
-          gltf,
-          views: 0,
-          downloads: 0,
-          totalTriangleCount,
-          totalVertexCount,
-        }),
-      ])
+      .create([node('model', 'Model', modelData)])
       .setVariables({ 'model.created_at': 'timestamp()' })
       .buildQueryObject();
     await this.neo4jService.write(modelCreationQ.query, modelCreationQ.params);

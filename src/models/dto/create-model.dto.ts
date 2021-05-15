@@ -1,4 +1,13 @@
-import { ArrayNotEmpty, IsNotEmpty, IsOptional } from 'class-validator';
+import { ArrayNotEmpty, IsNotEmpty, IsOptional, IsUUID } from 'class-validator';
+
+export class FileInfo {
+  @IsNotEmpty()
+  @IsUUID()
+  id: string;
+
+  @IsNotEmpty()
+  name: string;
+}
 
 export class CreateModelDto {
   @IsNotEmpty()
@@ -12,4 +21,13 @@ export class CreateModelDto {
 
   @IsOptional()
   metadata: { [key: string]: string };
+
+  @ArrayNotEmpty()
+  images: FileInfo[];
+
+  @ArrayNotEmpty()
+  models: FileInfo[];
+
+  @ArrayNotEmpty()
+  gltf: FileInfo[];
 }

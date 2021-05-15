@@ -1,5 +1,4 @@
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
-import { multerOptions } from 'src/utils/multer-options';
 
 import {
   Body,
@@ -10,11 +9,8 @@ import {
   Post,
   Put,
   Request,
-  UploadedFiles,
   UseGuards,
-  UseInterceptors,
 } from '@nestjs/common';
-import { FileFieldsInterceptor } from '@nestjs/platform-express';
 
 import { CreateModelDto } from './dto/create-model.dto';
 import { UpdateModelDto } from './dto/update-model.dto';
@@ -27,18 +23,8 @@ export class ModelsController {
 
   @UseGuards(JwtAuthGuard)
   @Post()
-  @UseInterceptors(
-    FileFieldsInterceptor(
-      [{ name: 'models' }, { name: 'images' }, { name: 'gltf' }],
-      multerOptions(process.env.UPLOAD_DIRECTORY),
-    ),
-  )
-  create(
-    @Request() req: any,
-    @Body() createModelDto: CreateModelDto,
-    @UploadedFiles() files: any,
-  ) {
-    return this.modelsService.create(req.user, createModelDto, files);
+  create(@Request() req: any, @Body() createModelDto: CreateModelDto) {
+    return this.modelsService.create(req.user, createModelDto);
   }
 
   @Get()

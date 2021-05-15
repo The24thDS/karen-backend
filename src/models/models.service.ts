@@ -74,10 +74,11 @@ export class ModelsService {
         `${modelPath}/gltf`,
       )
     ).find((file) => file.name.endsWith('.gltf')).name;
-    const { tags, models, ...modelProps } = createModelDto;
+    const { tags, name, description } = createModelDto;
     const modelData = {
-      ...modelProps,
       id,
+      name,
+      description,
       slug,
       files,
       images,
@@ -86,9 +87,11 @@ export class ModelsService {
       downloads: 0,
       totalTriangleCount,
       totalVertexCount,
-      metadata: JSON.stringify(modelProps.metadata),
+      metadata: undefined,
     };
-    console.log(modelData);
+    if (createModelDto.metadata) {
+      modelData.metadata = JSON.stringify(createModelDto.metadata);
+    }
     const modelCreationQ = new Query()
       .create([node('model', 'Model', modelData)])
       .setVariables({ 'model.created_at': 'timestamp()' })
@@ -204,7 +207,25 @@ export class ModelsService {
   }
 
   update(id: string, updateModelDto: UpdateModelDto) {
-    return `This action updates a #${id} model`;
+    console.log(updateModelDto);
+    if (updateModelDto.images?.length) {
+      console.log('do something with images');
+    }
+    if (updateModelDto.gltf?.length) {
+      console.log('do something with gltf');
+    }
+    if (updateModelDto.models?.length) {
+      console.log('do something with models');
+    }
+    const updateQuery = new Query()
+      .matchNode('model', 'Model', { id })
+      .setValues({
+        'model.name': updateModelDto.name,
+        'model.description': updateModelDto.description,
+      })
+      .buildQueryObject();
+    console.log(updateQuery);
+    // return `This action updates a #${id} model`;
   }
 
   async remove(id: string): Promise<any> {

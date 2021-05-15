@@ -1,5 +1,25 @@
-import { PartialType } from '@nestjs/mapped-types';
+import { ArrayNotEmpty, IsNotEmpty, IsOptional } from 'class-validator';
+import { FileInfo } from './create-model.dto';
 
-import { CreateModelDto } from './create-model.dto';
+export class UpdateModelDto {
+  @IsNotEmpty()
+  name: string;
 
-export class UpdateModelDto extends PartialType(CreateModelDto) {}
+  @IsNotEmpty()
+  description: string;
+
+  @ArrayNotEmpty()
+  tags: string[];
+
+  @IsOptional()
+  metadata: { [key: string]: string };
+
+  @IsOptional()
+  images: FileInfo[];
+
+  @IsOptional()
+  models: FileInfo[];
+
+  @IsOptional()
+  gltf: FileInfo[];
+}

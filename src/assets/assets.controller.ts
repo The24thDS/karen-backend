@@ -46,6 +46,40 @@ export class AssetsController {
     });
   }
 
+  @Get('models/inline/:modelAuthor/:modelSlug/:name')
+  @Header('Content-Type', 'text/plain')
+  getInlineModelFile(
+    @Param('name') fileName: string,
+    @Param('modelAuthor') modelAuthor: string,
+    @Param('modelSlug') modelSlug: string,
+    @Res() res,
+  ) {
+    const modelFilesPath = `${process.env.UPLOAD_DIRECTORY}/${modelAuthor}/${modelSlug}/files`;
+    return res.sendFile(fileName, {
+      root: modelFilesPath,
+      headers: {
+        'Content-Disposition': `inline; filename="${fileName}"`,
+      },
+    });
+  }
+
+  @Get('gltf/inline/:modelAuthor/:modelSlug/:name')
+  @Header('Content-Type', 'text/plain')
+  getGltfFile(
+    @Param('name') fileName: string,
+    @Param('modelAuthor') modelAuthor: string,
+    @Param('modelSlug') modelSlug: string,
+    @Res() res,
+  ) {
+    const modelFilesPath = `${process.env.UPLOAD_DIRECTORY}/${modelAuthor}/${modelSlug}/gltf`;
+    return res.sendFile(fileName, {
+      root: modelFilesPath,
+      headers: {
+        'Content-Disposition': `inline; filename="${fileName}"`,
+      },
+    });
+  }
+
   @Get([
     'gltf/:modelAuthor/:modelSlug/:name',
     'gltf/:modelAuthor/:modelSlug/textures/:name',

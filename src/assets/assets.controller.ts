@@ -4,9 +4,13 @@ import {
   Delete,
   Get,
   Header,
+  InternalServerErrorException,
+  NotFoundException,
   Param,
   Post,
+  Request,
   Res,
+  UnauthorizedException,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -15,9 +19,13 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { multerOptions } from 'src/utils/multer-options';
 import { promises as fs } from 'fs';
+import { ModelsService } from 'src/models/models.service';
 
 @Controller('assets')
 export class AssetsController {
+  allowedAssetTypes = ['images', 'models', 'gltf'];
+  constructor(private readonly modelsService: ModelsService) {}
+
   @Get('images/:modelAuthor/:modelSlug/:name')
   getImage(
     @Param('name') imageName: string,
@@ -149,6 +157,66 @@ export class AssetsController {
       return 'OK';
     } catch (err) {
       return 'NOT OK';
+    }
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete(':type/:modelAuthor/:modelSlug/:name')
+  @Header('Content-Type', 'text/plain')
+  async removeFile(
+    @Request() req,
+    @Param('type') type: string,
+    @Param('modelAuthor') modelAuthor: string,
+    @Param('modelSlug') modelSlug: string,
+    @Param('name') name: string,
+  ) {
+    if (this.allowedAssetTypes.includes(type)) {
+      if (type === 'models') {
+        type = 'files';
+      }
+      const author = await this.modelsService.findModelAuthor(modelSlug);
+      if (author.id === req.user.id) {
+        const filePath = `${process.env.UPLOAD_DIRECTORY}/${modelAuthor}/${modelSlug}/${type}/${name}`;
+        const model = await this.modelsService.findOne(modelSlug);
+        switch (type) {
+          case 'images':
+            const { images } = model;
+            const newImages = images.filter((image) => image !== name);
+            await this.modelsService.setModelImages(modelSlug, newImages);
+            break;
+          case 'files':
+            const { files } = model;
+            const newFiles = files.filter(
+              (file) => JSON.parse(file).name !== name,
+            );
+            await this.modelsService.setModelFiles(modelSlug, newFiles);
+            break;
+          case 'gltf':
+            await this.modelsService.removeModelGltf(modelSlug);
+            break;
+          default:
+            break;
+        }
+        try {
+          if (type === 'gltf') {
+            const gltfDir = filePath.split('/').slice(0, -1).join('/');
+            const files = await fs.readdir(gltfDir);
+            for (const file of files) {
+              await fs.unlink(`${gltfDir}/${file}`);
+            }
+          } else {
+            await fs.unlink(filePath);
+          }
+          return { success: true };
+        } catch (err) {
+          console.log(err);
+          throw new InternalServerErrorException("Couldn't delete the file.");
+        }
+      } else {
+        throw new UnauthorizedException();
+      }
+    } else {
+      throw new NotFoundException(`Can't find ${type} type.`);
     }
   }
 }

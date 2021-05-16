@@ -14,6 +14,7 @@ import { formatDate, parseRecord } from 'src/utils/neo4j-utils';
 import {
   FindOneQueryResponse,
   FindOneRequestResponse,
+  Model,
   StrippedModelWithUsername,
 } from './interfaces/model.interfaces';
 import { User } from 'src/users/interfaces/user.interface';
@@ -196,6 +197,34 @@ export class ModelsService {
     return result;
   }
 
+  async findOne(slug: string): Promise<Model> {
+    const modelQuery = new Query()
+      .match([node('model', 'Model', { slug })])
+      .return('model')
+      .buildQueryObject();
+    const mqRes = await this.neo4jService.read(
+      modelQuery.query,
+      modelQuery.params,
+    );
+    return parseRecord(mqRes.records[0]);
+  }
+
+  async findModelAuthor(slug: string): Promise<User> {
+    const modelAuthorQuery = new Query()
+      .match([
+        node('user', 'User'),
+        relation('out', 'UPLOADED'),
+        node('model', 'Model', { slug }),
+      ])
+      .return('user')
+      .buildQueryObject();
+    const maqRes = await this.neo4jService.read(
+      modelAuthorQuery.query,
+      modelAuthorQuery.params,
+    );
+    return parseRecord(maqRes.records[0]);
+  }
+
   async incrementViews(slug: string): Promise<any> {
     const q = new Query()
       .match([node('model', 'Model', { slug })])
@@ -234,6 +263,39 @@ export class ModelsService {
       { id },
     );
     return res;
+  }
+
+  async setModelImages(slug: string, images: string[]) {
+    const updateImagesQuery = new Query()
+      .match([node('model', 'Model', { slug })])
+      .setValues({ 'model.images': images })
+      .buildQueryObject();
+    await this.neo4jService.write(
+      updateImagesQuery.query,
+      updateImagesQuery.params,
+    );
+  }
+
+  async setModelFiles(slug: string, files: string[]) {
+    const updateFilesQuery = new Query()
+      .match([node('model', 'Model', { slug })])
+      .setValues({ 'model.files': files })
+      .buildQueryObject();
+    await this.neo4jService.write(
+      updateFilesQuery.query,
+      updateFilesQuery.params,
+    );
+  }
+
+  async removeModelGltf(slug: string) {
+    const removeGltfQuery = new Query()
+      .match([node('model', 'Model', { slug })])
+      .setValues({ 'model.gltf': '' })
+      .buildQueryObject();
+    await this.neo4jService.write(
+      removeGltfQuery.query,
+      removeGltfQuery.params,
+    );
   }
 
   private async deleteFiles(files: fs.PathLike[]) {

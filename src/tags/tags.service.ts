@@ -17,7 +17,6 @@ export class TagsService {
   async findAll(): Promise<string[]> {
     const q = new Query().match([node('tag', 'Tag')]).return('tag');
     const response = await this.neo4jService.read(q.build());
-    console.log(response.records[0]);
     const tags: string[] = response.records.map((record) =>
       parseRecord(record),
     );

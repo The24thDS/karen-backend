@@ -48,9 +48,13 @@ export class ModelsController {
   }
 
   @UseGuards(JwtAuthGuard)
-  @Put(':id')
-  update(@Param('id') id: string, @Body() updateModelDto: UpdateModelDto) {
-    return this.modelsService.update(id, updateModelDto);
+  @Put(':slug')
+  update(
+    @Request() req,
+    @Param('slug') slug: string,
+    @Body() updateModelDto: UpdateModelDto,
+  ) {
+    return this.modelsService.update(slug, updateModelDto, req.user.id);
   }
 
   @UseGuards(JwtAuthGuard)

@@ -5,7 +5,11 @@ import slugify from 'slugify';
 const bytes = require('bytes');
 import { Query, node, relation } from 'cypher-query-builder';
 
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 
 import { CreateModelDto } from './dto/create-model.dto';
 import { UpdateModelDto } from './dto/update-model.dto';
@@ -225,6 +229,22 @@ export class ModelsService {
     return parseRecord(maqRes.records[0]);
   }
 
+  async findModelTags(slug: string): Promise<string[]> {
+    const q = new Query()
+      .match([
+        node('model', 'Model', { slug }),
+        relation('out', '', 'TAGGED_WITH'),
+        node('tags', 'Tag'),
+      ])
+      .return({
+        'collect(tags.name)': 'tags',
+      })
+      .buildQueryObject();
+    const response = await this.neo4jService.read(q.query, q.params);
+    const tags = parseRecord(response.records[0]);
+    return tags;
+  }
+
   async incrementViews(slug: string): Promise<any> {
     const q = new Query()
       .match([node('model', 'Model', { slug })])
@@ -235,26 +255,95 @@ export class ModelsService {
     await this.neo4jService.write(q.query, q.params);
   }
 
-  update(id: string, updateModelDto: UpdateModelDto) {
-    console.log(updateModelDto);
+  async update(slug: string, updateModelDto: UpdateModelDto, userId: string) {
+    const author = await this.findModelAuthor(slug);
+    if (author.id !== userId) {
+      throw new UnauthorizedException();
+    }
+    const model = await this.findOne(slug);
+    const modelPath = `${process.env.UPLOAD_DIRECTORY}/${author.username}/${slug}`;
     if (updateModelDto.images?.length) {
-      console.log('do something with images');
+      const images = (
+        await this.assetsService.moveFiles(
+          updateModelDto.images,
+          `${modelPath}/images`,
+        )
+      ).map((file) => file.name);
+      model.images = [...model.images, ...images];
     }
     if (updateModelDto.gltf?.length) {
-      console.log('do something with gltf');
+      const gltfFile = updateModelDto.gltf.find((fileInfo) =>
+        fileInfo.name.endsWith('.gltf'),
+      );
+      if (!gltfFile) {
+        throw new BadRequestException('A GLTF file is required');
+      }
+      const gltfValidationResponse = await this.assetsService.validateGltfPayload(
+        updateModelDto.gltf,
+      );
+      if (gltfValidationResponse.errors !== undefined) {
+        throw new BadRequestException(gltfValidationResponse.errors);
+      }
+      const gltf = (
+        await this.assetsService.moveFiles(
+          updateModelDto.gltf,
+          `${modelPath}/gltf`,
+        )
+      ).find((file) => file.name.endsWith('.gltf')).name;
+      model.gltf = gltf;
     }
     if (updateModelDto.models?.length) {
-      console.log('do something with models');
+      const files = (
+        await this.assetsService.moveFiles(
+          updateModelDto.models,
+          `${modelPath}/files`,
+        )
+      ).map((file) => JSON.stringify(file));
+      model.files = [...model.files, ...files];
+    }
+    const currentModelTags = await this.findModelTags(slug);
+    const newTags = updateModelDto.tags.filter(
+      (tag) => !currentModelTags.includes(tag),
+    );
+    const deletedTags = currentModelTags.filter(
+      (tag) => !updateModelDto.tags.includes(tag),
+    );
+    if (newTags.length) {
+      const newTagsQuery = new Query()
+        .matchNode('model', 'Model', { slug })
+        .with('model')
+        .unwind(newTags, 'tagName')
+        .raw('MERGE (tag:Tag {name: tagName})')
+        .merge([node('model'), relation('out', '', 'TAGGED_WITH'), node('tag')])
+        .buildQueryObject();
+      await this.neo4jService.write(newTagsQuery.query, newTagsQuery.params);
+    }
+    if (deletedTags.length) {
+      const deleteTagsQuery = new Query()
+        .matchNode('model', 'Model', { slug })
+        .with('model')
+        .unwind(deletedTags, 'tagName')
+        .raw('MATCH (model)-[rel:TAGGED_WITH]->(tag:Tag {name: tagName})')
+        .delete('rel')
+        .buildQueryObject();
+      await this.neo4jService.write(
+        deleteTagsQuery.query,
+        deleteTagsQuery.params,
+      );
     }
     const updateQuery = new Query()
-      .matchNode('model', 'Model', { id })
+      .matchNode('model', 'Model', { slug })
       .setValues({
         'model.name': updateModelDto.name,
         'model.description': updateModelDto.description,
+        'model.metadata': JSON.stringify(updateModelDto.metadata) ?? null,
+        'model.images': model.images,
+        'model.files': model.files,
+        'model.gltf': model.gltf,
       })
       .buildQueryObject();
-    console.log(updateQuery);
-    // return `This action updates a #${id} model`;
+    await this.neo4jService.write(updateQuery.query, updateQuery.params);
+    return { success: true };
   }
 
   async remove(id: string): Promise<any> {

@@ -12,6 +12,9 @@ export interface Model {
   totalTriangleCount: number;
   downloads: number;
   views: number;
+  rating?: number;
+  isUpvoted?: boolean;
+  isDownvoted?: boolean;
   metadata?: string;
   created_at: Neo4jNumber;
 }

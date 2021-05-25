@@ -1,19 +1,17 @@
 import { Neo4jService } from 'nest-neo4j/dist';
 import { v4 as uuidv4 } from 'uuid';
-import * as fs from 'fs';
 import slugify from 'slugify';
-const bytes = require('bytes');
 import { Query, node, relation } from 'cypher-query-builder';
 
 import {
   BadRequestException,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 
 import { CreateModelDto } from './dto/create-model.dto';
 import { UpdateModelDto } from './dto/update-model.dto';
-import { ModelUploadFiles } from './interfaces/files.interface';
 import { formatDate, parseRecord } from 'src/utils/neo4j-utils';
 import {
   FindOneQueryResponse,
@@ -169,8 +167,11 @@ export class ModelsService {
     return result;
   }
 
-  async findOneWithUserAndTags(slug: string): Promise<FindOneRequestResponse> {
-    const q = new Query()
+  async findOneWithUserAndTags(
+    slug: string,
+    userId: string = null,
+  ): Promise<FindOneRequestResponse> {
+    let q = new Query()
       .match([
         node('user', 'User'),
         relation('out', '', 'UPLOADED'),
@@ -186,13 +187,21 @@ export class ModelsService {
         },
       ])
       .buildQueryObject();
-    const response = await this.neo4jService.read(q.query, q.params);
+    let dbResponse = await this.neo4jService.read(q.query, q.params);
     const { user, tags, ...rest }: FindOneQueryResponse = parseRecord(
-      response.records[0],
+      dbResponse.records[0],
     );
+    const rating = await this.getRating(slug);
+    const isUpvoted = userId ? await this.isUpvotedByUser(slug, userId) : false;
+    const isDownvoted = userId
+      ? await this.isDownvotedByUser(slug, userId)
+      : false;
     const result: FindOneRequestResponse = {
       model: {
         ...rest,
+        rating,
+        isUpvoted,
+        isDownvoted,
         created_at: formatDate(rest.created_at),
       },
       user,
@@ -253,6 +262,72 @@ export class ModelsService {
       })
       .buildQueryObject();
     await this.neo4jService.write(q.query, q.params);
+  }
+
+  async upvote(slug: string, userId: string): Promise<any> {
+    if (await this.exists(slug)) {
+      const existsQuery =
+        'RETURN EXISTS ((:User { id: $id })-[:UPVOTED]->(:Model { slug: $slug })) as upvoteExists;';
+      let dbResponse = await this.neo4jService.read(existsQuery, {
+        id: userId,
+        slug,
+      });
+      const { upvoteExists } = parseRecord(dbResponse.records[0]);
+      if (upvoteExists) {
+        const removeQ = new Query()
+          .match([
+            node('', 'User', { id: userId }),
+            relation('out', 'r', 'UPVOTED'),
+            node('', 'Model', { slug }),
+          ])
+          .delete('r')
+          .buildQueryObject();
+        await this.neo4jService.write(removeQ.query, removeQ.params);
+      } else {
+        const createQ = new Query()
+          .matchNode('u', 'User', { id: userId })
+          .matchNode('m', 'Model', { slug })
+          .create([node('u'), relation('out', 'r', 'UPVOTED'), node('m')])
+          .buildQueryObject();
+        await this.neo4jService.write(createQ.query, createQ.params);
+      }
+      return { success: true };
+    } else {
+      throw new NotFoundException('Model NOT FOUND');
+    }
+  }
+
+  async downvote(slug: string, userId: string): Promise<any> {
+    if (await this.exists(slug)) {
+      const existsQuery =
+        'RETURN EXISTS ((:User { id: $id })-[:DOWNVOTED]->(:Model { slug: $slug })) as downvoteExists;';
+      let dbResponse = await this.neo4jService.read(existsQuery, {
+        id: userId,
+        slug,
+      });
+      const { downvoteExists } = parseRecord(dbResponse.records[0]);
+      if (downvoteExists) {
+        const removeQ = new Query()
+          .match([
+            node('', 'User', { id: userId }),
+            relation('out', 'r', 'DOWNVOTED'),
+            node('m', 'Model', { slug }),
+          ])
+          .delete('r')
+          .buildQueryObject();
+        await this.neo4jService.write(removeQ.query, removeQ.params);
+      } else {
+        const createQ = new Query()
+          .matchNode('u', 'User', { id: userId })
+          .matchNode('m', 'Model', { slug })
+          .create([node('u'), relation('out', 'r', 'DOWNVOTED'), node('m')])
+          .buildQueryObject();
+        await this.neo4jService.write(createQ.query, createQ.params);
+      }
+      return { success: true };
+    } else {
+      throw new NotFoundException('Model NOT FOUND');
+    }
   }
 
   async update(slug: string, updateModelDto: UpdateModelDto, userId: string) {
@@ -387,7 +462,63 @@ export class ModelsService {
     );
   }
 
-  private async deleteFiles(files: fs.PathLike[]) {
-    files.forEach((file) => fs.promises.unlink(file));
+  async exists(slug: string): Promise<boolean> {
+    const q = new Query()
+      .matchNode('m', 'Model', { slug })
+      .return({ 'count(*)': 'count' })
+      .buildQueryObject();
+    const dbResponse = await this.neo4jService.read(q.query, q.params);
+    console.log(dbResponse.records[0]);
+    const count = parseRecord(dbResponse.records[0]);
+    return !!count;
+  }
+
+  async getRating(slug: string): Promise<number> {
+    const q = new Query()
+      .match([
+        node('', 'User'),
+        relation('out', 'r', ['DOWNVOTED', 'UPVOTED']),
+        node('model', 'Model', { slug }),
+      ])
+      .return({
+        'type(r)': 'type',
+        'count(*)': 'amount',
+      })
+      .buildQueryObject();
+    const dbResponse = await this.neo4jService.read(q.query, q.params);
+    const dbVotes = Object.fromEntries(
+      dbResponse.records.map((r) => {
+        const parsed = parseRecord(r);
+        return [parsed.type, parsed.amount];
+      }),
+    );
+    const votes = {
+      UPVOTED: 0,
+      DOWNVOTED: 0,
+      ...dbVotes,
+    };
+    return votes.UPVOTED - votes.DOWNVOTED;
+  }
+
+  async isUpvotedByUser(slug: string, userId: string): Promise<boolean> {
+    const q =
+      'RETURN EXISTS ((:User { id: $id })-[:UPVOTED]->(:Model { slug: $slug })) as upvoted';
+    const dbResponse = await this.neo4jService.read(q, {
+      id: userId,
+      slug,
+    });
+    const { upvoted } = parseRecord(dbResponse.records[0]);
+    return upvoted;
+  }
+
+  async isDownvotedByUser(slug: string, userId: string): Promise<boolean> {
+    const q =
+      'RETURN EXISTS ((:User { id: $id })-[:DOWNVOTED]->(:Model { slug: $slug })) as downvoted';
+    const dbResponse = await this.neo4jService.read(q, {
+      id: userId,
+      slug,
+    });
+    const { downvoted } = parseRecord(dbResponse.records[0]);
+    return downvoted;
   }
 }

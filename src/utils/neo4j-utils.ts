@@ -5,7 +5,9 @@ export const parseRecord = (record: any): any => {
   let response = {};
   record.keys.forEach((key) => {
     const value = record.get(key);
-    if (
+    if (typeof value === 'object' && 'low' in value && 'high' in value) {
+      response[key] = Number(value.toString());
+    } else if (
       value instanceof Array ||
       (typeof value === 'string' && !key.includes('.'))
     ) {

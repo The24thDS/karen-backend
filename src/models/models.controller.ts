@@ -1,6 +1,7 @@
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -16,6 +17,8 @@ import { CreateModelDto } from './dto/create-model.dto';
 import { UpdateModelDto } from './dto/update-model.dto';
 import { ModelsService } from './models.service';
 import { SearchModelDto } from './dto/search-model-dto';
+import { VoteModelDto } from './dto/vote-model.dto';
+import { OptionalAuthGuard } from 'src/auth/optional-auth.guard';
 
 @Controller('models')
 export class ModelsController {
@@ -41,10 +44,27 @@ export class ModelsController {
     return models;
   }
 
+  @UseGuards(OptionalAuthGuard)
   @Get(':slug')
-  findOne(@Param('slug') slug: string) {
+  findOne(@Request() req, @Param('slug') slug: string) {
     this.modelsService.incrementViews(slug);
-    return this.modelsService.findOneWithUserAndTags(slug);
+    return this.modelsService.findOneWithUserAndTags(slug, req.user?.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':slug/vote')
+  vote(
+    @Request() req,
+    @Param('slug') slug: string,
+    @Body() voteModelDto: VoteModelDto,
+  ) {
+    if (voteModelDto.voteType === 'up') {
+      return this.modelsService.upvote(slug, req.user.id);
+    } else if (voteModelDto.voteType === 'down') {
+      return this.modelsService.downvote(slug, req.user.id);
+    } else {
+      throw new BadRequestException('Vote type incorrect');
+    }
   }
 
   @UseGuards(JwtAuthGuard)

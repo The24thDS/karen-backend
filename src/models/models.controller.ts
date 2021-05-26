@@ -48,7 +48,7 @@ export class ModelsController {
   @Get(':slug')
   findOne(@Request() req, @Param('slug') slug: string) {
     this.modelsService.incrementViews(slug);
-    return this.modelsService.findOneWithUserAndTags(slug, req.user?.id);
+    return this.modelsService.findOneWithUser(slug, req.user?.id);
   }
 
   @UseGuards(JwtAuthGuard)

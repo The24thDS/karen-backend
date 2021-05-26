@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { FileInfo } from 'src/models/dto/create-model.dto';
 import * as fs from 'fs';
 import * as validator from 'gltf-validator';
+import { ModelFile } from 'src/models/interfaces/model.interfaces';
 const bytes = require('bytes');
 
 interface validateGltfPayloadResponse {
@@ -62,16 +63,20 @@ export class AssetsService {
   async moveFiles(
     filesInfo: FileInfo[],
     destinationDir: fs.PathLike,
-  ): Promise<{ name: string; size: string }[]> {
+  ): Promise<ModelFile[]> {
     await fs.promises.mkdir(destinationDir, { recursive: true });
-    const files: { name: string; size: string }[] = [];
+    const files: ModelFile[] = [];
     for (let i = 0; i < filesInfo.length; i++) {
       const file = filesInfo[i];
       const filePath = `${process.env.TEMP_UPLOAD_DIRECTORY}/${file.id}_${file.name}`;
       try {
         const size = (await fs.promises.stat(filePath)).size;
         await fs.promises.rename(filePath, `${destinationDir}/${file.name}`);
-        files.push({ name: file.name, size: bytes(size) });
+        files.push({
+          name: file.name,
+          size: bytes(size),
+          type: file.name.slice(file.name.lastIndexOf('.') + 1),
+        });
       } catch (error) {
         console.log(error);
         throw new Error(error.message);

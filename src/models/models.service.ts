@@ -17,6 +17,7 @@ import {
   FindOneQueryResponse,
   FindOneRequestResponse,
   Model,
+  ModelFile,
   StrippedModelWithUsername,
 } from './interfaces/model.interfaces';
 import { User } from 'src/users/interfaces/user.interface';
@@ -38,33 +39,23 @@ export class ModelsService {
       errors.push('A GLTF file is required!');
     }
     if (errors.length) {
-      return {
-        statusCode: 400,
-        message: errors,
-        error: 'Bad Request',
-      };
+      throw new BadRequestException(errors);
     }
     const gltfValidationResponse = await this.assetsService.validateGltfPayload(
       createModelDto.gltf,
     );
     if (gltfValidationResponse.errors !== undefined) {
-      return {
-        statusCode: 400,
-        message: gltfValidationResponse.errors,
-        error: 'Bad Request',
-      };
+      throw new BadRequestException(gltfValidationResponse.errors);
     }
     const { totalTriangleCount, totalVertexCount } = gltfValidationResponse;
     const id = uuidv4();
     const dirPath = `${process.env.UPLOAD_DIRECTORY}/${user.username}`;
     const slug = `${slugify(createModelDto.name.toLowerCase())}-${id}`;
     const modelPath = `${dirPath}/${slug}`;
-    const files = (
-      await this.assetsService.moveFiles(
-        createModelDto.models,
-        `${modelPath}/files`,
-      )
-    ).map((file) => JSON.stringify(file));
+    const files = await this.assetsService.moveFiles(
+      createModelDto.models,
+      `${modelPath}/files`,
+    );
     const images = (
       await this.assetsService.moveFiles(
         createModelDto.images,
@@ -83,7 +74,6 @@ export class ModelsService {
       name,
       description,
       slug,
-      files,
       images,
       gltf,
       views: 0,
@@ -95,27 +85,23 @@ export class ModelsService {
     if (createModelDto.metadata) {
       modelData.metadata = JSON.stringify(createModelDto.metadata);
     }
-    const modelCreationQ = new Query()
-      .create([node('model', 'Model', modelData)])
+    const q = new Query()
+      .createNode('model', 'Model', modelData)
       .setVariables({ 'model.created_at': 'timestamp()' })
-      .buildQueryObject();
-    await this.neo4jService.write(modelCreationQ.query, modelCreationQ.params);
-
-    const userModelLinkQ = new Query()
-      .matchNode('user', 'User', { id: user.id })
-      .matchNode('model', 'Model', { id })
-      .create([node('user'), relation('out', '', 'UPLOADED'), node('model')])
-      .buildQueryObject();
-    await this.neo4jService.write(userModelLinkQ.query, userModelLinkQ.params);
-
-    const tagsQuery = new Query()
-      .matchNode('model', 'Model', { id })
       .with('model')
-      .unwind(tags, 'tagName')
-      .raw('MERGE (tag:Tag {name: tagName})')
-      .merge([node('model'), relation('out', '', 'TAGGED_WITH'), node('tag')])
+      .matchNode('user', 'User', { id: user.id })
+      .create([node('user'), relation('out', 'r', 'UPLOADED'), node('model')])
+      .with('model')
+      .raw(
+        'FOREACH (tagName in $tags | MERGE (tag:Tag {name: tagName}) CREATE (model)-[:TAGGED_WITH]->(tag))',
+        { tags },
+      )
+      .raw(
+        'FOREACH (file in $files | CREATE (model)-[:HAS_FILE]->(:File {name: file.name, size: file.size, type: file.type}))',
+        { files },
+      )
       .buildQueryObject();
-    await this.neo4jService.write(tagsQuery.query, tagsQuery.params);
+    await this.neo4jService.write(q.query, q.params);
 
     return { slug };
   }
@@ -167,7 +153,7 @@ export class ModelsService {
     return result;
   }
 
-  async findOneWithUserAndTags(
+  async findOneWithUser(
     slug: string,
     userId: string = null,
   ): Promise<FindOneRequestResponse> {
@@ -176,21 +162,31 @@ export class ModelsService {
         node('user', 'User'),
         relation('out', '', 'UPLOADED'),
         node('model', 'Model', { slug }),
-        relation('out', '', 'TAGGED_WITH'),
-        node('tags', 'Tag'),
+        relation('out', 'r', ['HAS_FILE', 'TAGGED_WITH']),
+        node('x'),
       ])
       .return([
         'model',
         {
           user: ['username'],
-          'collect(tags.name)': 'tags',
+          'type(r)': 'relType',
         },
       ])
+      .raw(
+        `,
+        case type(r)
+          when 'HAS_FILE' then collect(properties(x))
+          when 'TAGGED_WITH' then collect(x.name)
+        end as nodes
+      `,
+      )
+      .orderBy('relType')
       .buildQueryObject();
     let dbResponse = await this.neo4jService.read(q.query, q.params);
-    const { user, tags, ...rest }: FindOneQueryResponse = parseRecord(
-      dbResponse.records[0],
-    );
+    const [
+      { nodes: files, user, relType, ...rest },
+      { nodes: tags },
+    ]: FindOneQueryResponse[] = dbResponse.records.map((r) => parseRecord(r));
     const rating = await this.getRating(slug);
     const isUpvoted = userId ? await this.isUpvotedByUser(slug, userId) : false;
     const isDownvoted = userId
@@ -199,13 +195,14 @@ export class ModelsService {
     const result: FindOneRequestResponse = {
       model: {
         ...rest,
+        files: files as ModelFile[],
         rating,
         isUpvoted,
         isDownvoted,
         created_at: formatDate(rest.created_at),
       },
       user,
-      tags,
+      tags: tags as string[],
     };
     return result;
   }
@@ -337,6 +334,7 @@ export class ModelsService {
     }
     const model = await this.findOne(slug);
     const modelPath = `${process.env.UPLOAD_DIRECTORY}/${author.username}/${slug}`;
+    let newFiles = [];
     if (updateModelDto.images?.length) {
       const images = (
         await this.assetsService.moveFiles(
@@ -368,13 +366,10 @@ export class ModelsService {
       model.gltf = gltf;
     }
     if (updateModelDto.models?.length) {
-      const files = (
-        await this.assetsService.moveFiles(
-          updateModelDto.models,
-          `${modelPath}/files`,
-        )
-      ).map((file) => JSON.stringify(file));
-      model.files = [...model.files, ...files];
+      newFiles = await this.assetsService.moveFiles(
+        updateModelDto.models,
+        `${modelPath}/files`,
+      );
     }
     const currentModelTags = await this.findModelTags(slug);
     const newTags = updateModelDto.tags.filter(
@@ -413,9 +408,13 @@ export class ModelsService {
         'model.description': updateModelDto.description,
         'model.metadata': JSON.stringify(updateModelDto.metadata) ?? null,
         'model.images': model.images,
-        'model.files': model.files,
         'model.gltf': model.gltf,
       })
+      .with('model')
+      .unwind(newFiles, 'file')
+      .raw(
+        'CREATE (model)-[:HAS_FILE]->(:File {name: file.name, size: file.size, type: file.type})',
+      )
       .buildQueryObject();
     await this.neo4jService.write(updateQuery.query, updateQuery.params);
     return { success: true };
@@ -440,10 +439,14 @@ export class ModelsService {
     );
   }
 
-  async setModelFiles(slug: string, files: string[]) {
+  async removeFile(slug: string, name: string) {
     const updateFilesQuery = new Query()
-      .match([node('model', 'Model', { slug })])
-      .setValues({ 'model.files': files })
+      .match([
+        node('model', 'Model', { slug }),
+        relation('out', '', 'HAS_FILE'),
+        node('file', 'File', { name }),
+      ])
+      .detachDelete('file')
       .buildQueryObject();
     await this.neo4jService.write(
       updateFilesQuery.query,

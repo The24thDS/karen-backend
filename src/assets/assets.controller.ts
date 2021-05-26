@@ -185,11 +185,7 @@ export class AssetsController {
             await this.modelsService.setModelImages(modelSlug, newImages);
             break;
           case 'files':
-            const { files } = model;
-            const newFiles = files.filter(
-              (file) => JSON.parse(file).name !== name,
-            );
-            await this.modelsService.setModelFiles(modelSlug, newFiles);
+            await this.modelsService.removeFile(modelSlug, name);
             break;
           case 'gltf':
             await this.modelsService.removeModelGltf(modelSlug);

@@ -1,10 +1,15 @@
 import { Neo4jNumber } from '../../utils/interfaces/neo4j.interfaces';
 
+export interface ModelFile {
+  name: string;
+  size: string;
+  type: string;
+}
+
 export interface Model {
   id: string;
   name: string;
   slug: string;
-  files: string[];
   images: string[];
   gltf: string;
   description: string;
@@ -19,13 +24,19 @@ export interface Model {
   created_at: Neo4jNumber;
 }
 
-export interface ModelWithDateString extends Omit<Model, 'created_at'> {
+export interface ModelWithFiles extends Model {
+  files: ModelFile[];
+}
+
+export interface ModelWithDateString
+  extends Omit<ModelWithFiles, 'created_at'> {
   created_at: string;
 }
 
 export interface FindOneQueryResponse extends Model {
+  relType: string;
   user: { username: string };
-  tags: string[];
+  nodes: string[] | ModelFile[];
 }
 
 export interface FindOneRequestResponse {

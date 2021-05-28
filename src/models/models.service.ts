@@ -6,6 +6,7 @@ import { Query, node, relation } from 'cypher-query-builder';
 import {
   BadRequestException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -420,12 +421,25 @@ export class ModelsService {
     return { success: true };
   }
 
-  async remove(id: string): Promise<any> {
-    const res = await this.neo4jService.write(
-      'MATCH (n:Model {id: $id}) delete n',
-      { id },
-    );
-    return res;
+  async remove(slug: string): Promise<any> {
+    const { query, params } = new Query()
+      .match([
+        node('model', 'Model', { slug }),
+        relation('in', '', 'UPLOADED'),
+        node('user', 'User'),
+      ])
+      .match([
+        node('model'),
+        relation('out', '', 'HAS_FILE'),
+        node('file', 'File'),
+      ])
+      .detachDelete(['model', 'file'])
+      .return('user.username')
+      .buildQueryObject();
+    const response = await this.neo4jService.write(query, params);
+    const { username } = parseRecord(response.records[0]);
+    await this.assetsService.removeModelAssets(username, slug);
+    return { success: true };
   }
 
   async setModelImages(slug: string, images: string[]) {

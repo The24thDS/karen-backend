@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { FileInfo } from 'src/models/dto/create-model.dto';
 import * as fs from 'fs';
 import * as validator from 'gltf-validator';
@@ -83,5 +83,18 @@ export class AssetsService {
       }
     }
     return files;
+  }
+
+  async removeModelAssets(username: String, slug: string): Promise<boolean> {
+    const dir = `${process.env.UPLOAD_DIRECTORY}/${username}/${slug}`;
+    try {
+      await fs.promises.rmdir(dir, { recursive: true });
+      return true;
+    } catch (e) {
+      console.log(e);
+      throw new InternalServerErrorException(
+        'Could not delete the model files.',
+      );
+    }
   }
 }

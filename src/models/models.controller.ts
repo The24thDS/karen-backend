@@ -78,8 +78,8 @@ export class ModelsController {
   }
 
   @UseGuards(JwtAuthGuard)
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.modelsService.remove(id);
+  @Delete(':slug')
+  remove(@Param('slug') slug: string) {
+    return this.modelsService.remove(slug);
   }
 }

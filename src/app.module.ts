@@ -10,6 +10,7 @@ import { ModelsModule } from './models/models.module';
 import { TagsModule } from './tags/tags.module';
 import { UsersModule } from './users/users.module';
 import { AssetsModule } from './assets/assets.module';
+import { CollectionsModule } from './collections/collections.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { AssetsModule } from './assets/assets.module';
     UsersModule,
     InitModule,
     AssetsModule,
+    CollectionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

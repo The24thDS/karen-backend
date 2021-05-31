@@ -68,6 +68,24 @@ export class ModelsController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Post(':modelSlug/collections/:collectionSlug')
+  addToCollection(
+    @Param('modelSlug') modelSlug: string,
+    @Param('collectionSlug') collectionSlug: string,
+  ) {
+    return this.modelsService.addToCollection(modelSlug, collectionSlug);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete(':modelSlug/collections/:collectionSlug')
+  removeFromCollection(
+    @Param('modelSlug') modelSlug: string,
+    @Param('collectionSlug') collectionSlug: string,
+  ) {
+    return this.modelsService.removeFromCollection(modelSlug, collectionSlug);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Put(':slug')
   update(
     @Request() req,

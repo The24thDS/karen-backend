@@ -328,6 +328,49 @@ export class ModelsService {
     }
   }
 
+  async addToCollection(
+    modelSlug: string,
+    collectionSlug: string,
+  ): Promise<any> {
+    const { query, params } = new Query()
+      .matchNode('model', 'Model', { slug: modelSlug })
+      .matchNode('c', 'Collection', { slug: collectionSlug })
+      .create([
+        node('model'),
+        relation('out', '', 'IS_IN_COLLECTION'),
+        node('c'),
+      ])
+      .buildQueryObject();
+    try {
+      await this.neo4jService.write(query, params);
+      return { success: true };
+    } catch (e) {
+      console.log(e);
+      throw new InternalServerErrorException(e.message);
+    }
+  }
+
+  async removeFromCollection(
+    modelSlug: string,
+    collectionSlug: string,
+  ): Promise<any> {
+    const { query, params } = new Query()
+      .match([
+        node('model', 'Model', { slug: modelSlug }),
+        relation('out', 'r', 'IS_IN_COLLECTION'),
+        node('c', 'Collection', { slug: collectionSlug }),
+      ])
+      .delete('r')
+      .buildQueryObject();
+    try {
+      await this.neo4jService.write(query, params);
+      return { success: true };
+    } catch (e) {
+      console.log(e);
+      throw new InternalServerErrorException(e.message);
+    }
+  }
+
   async update(slug: string, updateModelDto: UpdateModelDto, userId: string) {
     const author = await this.findModelAuthor(slug);
     if (author.id !== userId) {

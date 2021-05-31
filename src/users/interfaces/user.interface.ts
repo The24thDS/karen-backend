@@ -9,3 +9,8 @@ export interface User {
 }
 
 export interface UserWithoutPassword extends Omit<User, 'password'> {}
+
+export interface RequestUser {
+  id: string;
+  username: string;
+}

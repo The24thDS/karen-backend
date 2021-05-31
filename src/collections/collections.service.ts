@@ -15,7 +15,7 @@ import slugify from 'slugify';
 import { UpdateCollectionDTO } from './dto/update-collection.dto';
 import {
   Collection,
-  CollectionWithModels,
+  CollectionWithUserAndModels,
   CollectionWithUser,
 } from './interfaces/collections.interfaces';
 
@@ -184,10 +184,10 @@ export class CollectionsService {
     }
   }
 
-  async findOneWithModels(
+  async findOneWithAuthorAndModels(
     reqUser: RequestUser,
     slug: string,
-  ): Promise<CollectionWithModels> {
+  ): Promise<CollectionWithUserAndModels> {
     const { user, ...collection } = await this.findOneWithAuthor(slug);
     if (collection.private && reqUser.id !== user.id) {
       throw new UnauthorizedException('This collection is private.');
@@ -207,6 +207,7 @@ export class CollectionsService {
         const result = response.records.map((r) => parseRecord(r));
         return {
           ...collection,
+          user,
           models: result.map(({ m, u }) => ({
             name: m.name,
             slug: m.slug,

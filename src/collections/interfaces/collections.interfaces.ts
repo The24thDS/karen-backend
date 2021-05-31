@@ -15,6 +15,6 @@ export interface CollectionWithUser extends Collection {
   user: RequestUser;
 }
 
-export interface CollectionWithModels extends Collection {
+export interface CollectionWithUserAndModels extends CollectionWithUser {
   models: StrippedModelWithUsername[];
 }

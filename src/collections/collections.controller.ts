@@ -39,7 +39,7 @@ export class CollectionsController {
   @UseGuards(OptionalAuthGuard)
   @Get(':slug/models')
   getOneWithModels(@Req() req, @Param('slug') slug: string) {
-    return this.collectionsService.findOneWithModels(req.user, slug);
+    return this.collectionsService.findOneWithAuthorAndModels(req.user, slug);
   }
 
   @UseGuards(JwtAuthGuard)

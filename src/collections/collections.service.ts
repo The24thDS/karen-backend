@@ -175,6 +175,77 @@ export class CollectionsService {
     }
   }
 
+  async findAllForModel(
+    reqUser: RequestUser | undefined,
+    slug: string,
+  ): Promise<Collection[]> {
+    const whereCondition: any[] = [{ 'c.private': false }];
+    if (reqUser) {
+      whereCondition.push({ 'u.id': reqUser.id });
+    }
+    const { query, params } = new Query()
+      .match([
+        node('m', 'Model', { slug }),
+        relation('out', '', 'IS_IN_COLLECTION'),
+        node('c', 'Collection'),
+        relation('in', '', 'CREATED_COLLECTION'),
+        node('u', 'User'),
+      ])
+      .where(whereCondition)
+      .return('c')
+      .buildQueryObject();
+    try {
+      const response = await this.neo4jSevice.write(query, params);
+      const results = response.records
+        .map((r) => parseRecord(r))
+        .map((r) => ({
+          ...r,
+          created: formatDate(r.created),
+          updated: formatDate(r.updated),
+        }));
+      return results;
+    } catch (e) {
+      console.log(e);
+      throw new InternalServerErrorException(e.message);
+    }
+  }
+
+  async findAllForModelForUser(
+    reqUser: RequestUser | undefined,
+    slug: string,
+    username: string,
+  ): Promise<Collection[]> {
+    const whereCondition: any[] = [{ 'c.private': false }];
+    if (reqUser.username === username) {
+      whereCondition.push({ 'c.private': true });
+    }
+    const { query, params } = new Query()
+      .match([
+        node('m', 'Model', { slug }),
+        relation('out', '', 'IS_IN_COLLECTION'),
+        node('c', 'Collection'),
+        relation('in', '', 'CREATED_COLLECTION'),
+        node('u', 'User', { username }),
+      ])
+      .where(whereCondition)
+      .return('c')
+      .buildQueryObject();
+    try {
+      const response = await this.neo4jSevice.write(query, params);
+      const results = response.records
+        .map((r) => parseRecord(r))
+        .map((r) => ({
+          ...r,
+          created: formatDate(r.created),
+          updated: formatDate(r.updated),
+        }));
+      return results;
+    } catch (e) {
+      console.log(e);
+      throw new InternalServerErrorException(e.message);
+    }
+  }
+
   async findOne(reqUser: RequestUser, slug: string): Promise<Collection> {
     const { user, ...collection } = await this.findOneWithAuthor(slug);
     if (collection.private && reqUser?.id !== user.id) {

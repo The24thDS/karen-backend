@@ -31,6 +31,26 @@ export class CollectionsController {
   }
 
   @UseGuards(OptionalAuthGuard)
+  @Get('model/:slug')
+  getAllForModel(@Req() req, @Param('slug') slug: string) {
+    return this.collectionsService.findAllForModel(req.user, slug);
+  }
+
+  @UseGuards(OptionalAuthGuard)
+  @Get('model/:slug/user/:username')
+  getAllForModelForUser(
+    @Req() req,
+    @Param('slug') slug: string,
+    @Param('username') username: string,
+  ) {
+    return this.collectionsService.findAllForModelForUser(
+      req.user,
+      slug,
+      username,
+    );
+  }
+
+  @UseGuards(OptionalAuthGuard)
   @Get(':slug')
   getOne(@Req() req, @Param('slug') slug: string) {
     return this.collectionsService.findOne(req.user, slug);

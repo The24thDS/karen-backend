@@ -413,15 +413,21 @@ export class ModelsService {
           ],
           user: ['username'],
         },
+        'sum(score) as score',
       ])
       .orderBy('score', 'DESC')
       .limit(10)
       .buildQueryObject();
     try {
       const response = await this.neo4jService.read(query, params);
-      const results: StrippedModelWithUsername[] = response.records.map((r) =>
-        parseRecord(r),
-      );
+      const results: StrippedModelWithUsername[] = response.records
+        .map((r) => parseRecord(r))
+        .map((r) => ({
+          name: r.name,
+          slug: r.slug,
+          image: r.image,
+          user: r.user,
+        }));
       return results;
     } catch (error) {
       console.log(error);

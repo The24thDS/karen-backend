@@ -51,6 +51,11 @@ export class ModelsController {
     return this.modelsService.findOneWithUser(slug, req.user?.id);
   }
 
+  @Get(':slug/recommended')
+  async findRecommendations(@Param('slug') slug: string) {
+    return this.modelsService.findRecommendedModels(slug);
+  }
+
   @UseGuards(JwtAuthGuard)
   @Post(':slug/vote')
   vote(

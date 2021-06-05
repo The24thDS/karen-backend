@@ -1,7 +1,7 @@
 import { Neo4jService } from 'nest-neo4j/dist';
 import { v4 as uuidv4 } from 'uuid';
 import slugify from 'slugify';
-import { Query, node, relation } from 'cypher-query-builder';
+import { Query, node, relation, not } from 'cypher-query-builder';
 
 import {
   BadRequestException,
@@ -261,7 +261,7 @@ export class ModelsService {
       .buildQueryObject();
     await this.neo4jService.write(q.query, q.params);
   }
-
+  // TODO: refactor with the new query
   async upvote(slug: string, userId: string): Promise<any> {
     if (await this.exists(slug)) {
       const existsQuery =
@@ -294,7 +294,7 @@ export class ModelsService {
       throw new NotFoundException('Model NOT FOUND');
     }
   }
-
+  // TODO: refactor with the new query
   async downvote(slug: string, userId: string): Promise<any> {
     if (await this.exists(slug)) {
       const existsQuery =
@@ -368,6 +368,64 @@ export class ModelsService {
     } catch (e) {
       console.log(e);
       throw new InternalServerErrorException(e.message);
+    }
+  }
+
+  async findRecommendedModels(slug: string) {
+    const { query, params } = new Query()
+      .matchNode('m', 'Model', { slug })
+      .with(['m', 'split(toLower(m.name), " ") as words'])
+      .match([
+        node('m'),
+        relation('out', '', 'TAGGED_WITH'),
+        node('tag', 'Tag'),
+        relation('in', '', 'TAGGED_WITH'),
+        node('', 'Model'),
+      ])
+      .with([
+        'tag',
+        `
+          case
+            when tag.name IN words then 1.0/count(*)*(150/count(*))
+            else 1.0/count(*)
+          end as score
+        `,
+      ])
+      .match([
+        [
+          node('otherM', 'Model'),
+          relation('out', '', 'TAGGED_WITH'),
+          node('tag'),
+        ],
+        [
+          node('otherM', 'Model'),
+          relation('in', '', 'UPLOADED'),
+          node('user', 'User'),
+        ],
+      ])
+      .where(not({ otherM: { slug } }))
+      .return([
+        {
+          otherM: [
+            { name: 'name' },
+            { slug: 'slug' },
+            { 'images[0]': 'image' },
+          ],
+          user: ['username'],
+        },
+      ])
+      .orderBy('score', 'DESC')
+      .limit(10)
+      .buildQueryObject();
+    try {
+      const response = await this.neo4jService.read(query, params);
+      const results: StrippedModelWithUsername[] = response.records.map((r) =>
+        parseRecord(r),
+      );
+      return results;
+    } catch (error) {
+      console.log(error);
+      throw new InternalServerErrorException('Failed getting recommendations');
     }
   }
 

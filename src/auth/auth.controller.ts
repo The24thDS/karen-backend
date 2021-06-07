@@ -17,13 +17,13 @@ import { LocalAuthGuard } from './local-auth.guard';
 @Controller('auth')
 export class AuthController {
   constructor(
-    private readonly userService: UsersService,
+    private readonly usersService: UsersService,
     private readonly authService: AuthService,
   ) {}
 
   @Post('register')
   register(@Body() createUserDto: CreateUserDto) {
-    return this.userService.create(createUserDto);
+    return this.usersService.create(createUserDto);
   }
 
   @HttpCode(200)
@@ -37,6 +37,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Get('check-token')
   async checkToken(@Request() req) {
-    return { valid: true, user: req.user };
+    const user = await this.usersService.findOne({ id: req.user.id });
+    return { valid: true, user: { ...req.user, email: user.email } };
   }
 }

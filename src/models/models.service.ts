@@ -107,19 +107,29 @@ export class ModelsService {
     return { slug };
   }
 
-  async findAllWithUsername(): Promise<StrippedModelWithUsername[]> {
-    const q = new Query()
+  async findAllWithUsername(urlQuery): Promise<StrippedModelWithUsername[]> {
+    const page = Number(urlQuery.page ?? 0);
+    const pageSize = Number(urlQuery.pageSize ?? 25);
+    const { query, params } = new Query()
       .match([
         node('m', 'Model'),
         relation('in', '', 'UPLOADED'),
         node('user', 'User'),
       ])
       .return({
-        m: [{ slug: 'slug' }, { name: 'name' }, { 'images[0]': 'image' }],
+        m: [
+          { slug: 'slug' },
+          { name: 'name' },
+          { 'images[0]': 'image' },
+          { created_at: 'created_at' },
+        ],
         user: ['username'],
       })
-      .build();
-    const res = await this.neo4jService.read(q);
+      .orderBy('created_at', 'DESC')
+      .skip(page * pageSize)
+      .limit(pageSize)
+      .buildQueryObject();
+    const res = await this.neo4jService.read(query, params);
     const parsed: StrippedModelWithUsername[] = res.records.map((r) =>
       parseRecord(r),
     );

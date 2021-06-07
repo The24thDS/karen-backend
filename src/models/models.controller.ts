@@ -11,6 +11,7 @@ import {
   Put,
   Request,
   UseGuards,
+  Query,
 } from '@nestjs/common';
 
 import { CreateModelDto } from './dto/create-model.dto';
@@ -31,8 +32,8 @@ export class ModelsController {
   }
 
   @Get()
-  async findAll() {
-    const models = await this.modelsService.findAllWithUsername();
+  async findAll(@Query() query) {
+    const models = await this.modelsService.findAllWithUsername(query);
     return models;
   }
 

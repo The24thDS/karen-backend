@@ -37,17 +37,16 @@ export class ModelsController {
     return models;
   }
 
-  @Post('/search')
-  async findFromSearch(@Body() searchModelsDto: SearchModelDto) {
-    const models = await this.modelsService.findBySearchTerm(
-      searchModelsDto.searchString,
-    );
+  @Get('search')
+  async findFromSearch(@Query() query) {
+    const models = await this.modelsService.findBySearchTerm(query);
     return models;
   }
 
   @UseGuards(OptionalAuthGuard)
   @Get(':slug')
   findOne(@Request() req, @Param('slug') slug: string) {
+    console.log('here?');
     this.modelsService.incrementViews(slug);
     return this.modelsService.findOneWithUser(slug, req.user?.id);
   }

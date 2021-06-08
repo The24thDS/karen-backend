@@ -136,13 +136,17 @@ export class ModelsService {
     return parsed;
   }
 
-  async findBySearchTerm(
-    searchTerm: string,
-  ): Promise<StrippedModelWithUsername[]> {
-    const q = new Query()
+  async findBySearchTerm(urlQuery): Promise<StrippedModelWithUsername[]> {
+    const page = Number(urlQuery.page ?? 0);
+    const pageSize = Number(urlQuery.pageSize ?? 25);
+    const q = urlQuery.q;
+    if (!q) {
+      throw new BadRequestException('Search term is required');
+    }
+    const { query, params } = new Query()
       .raw(
-        'CALL db.index.fulltext.queryNodes("modelNamesAndDescriptions", $searchTerm) YIELD node',
-        { searchTerm },
+        'CALL db.index.fulltext.queryNodes("modelNamesAndDescriptions", $q) YIELD node',
+        { q },
       )
       .with('node')
       .match([
@@ -154,10 +158,14 @@ export class ModelsService {
         'node.slug': 'slug',
         'node.name': 'name',
         'node.images[0]': 'image',
+        'node.created_at': 'created_at',
         user: ['username'],
       })
+      .orderBy('created_at', 'DESC')
+      .skip(page * pageSize)
+      .limit(pageSize)
       .buildQueryObject();
-    const response = await this.neo4jService.read(q.query, q.params);
+    const response = await this.neo4jService.read(query, params);
     const result: StrippedModelWithUsername[] = response.records.map((record) =>
       parseRecord(record),
     );

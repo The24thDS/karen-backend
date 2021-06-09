@@ -1,7 +1,7 @@
 import { Neo4jService } from 'nest-neo4j/dist';
 import { v4 as uuidv4 } from 'uuid';
 import slugify from 'slugify';
-import { Query, node, relation, not } from 'cypher-query-builder';
+import { Query, node, relation, not, lessEqualTo } from 'cypher-query-builder';
 
 import {
   BadRequestException,
@@ -26,6 +26,7 @@ import { AssetsService } from 'src/assets/assets.service';
 
 @Injectable()
 export class ModelsService {
+  private triangleCounts = [5000, 10000, 15000, 20000];
   constructor(
     private readonly neo4jService: Neo4jService,
     private readonly assetsService: AssetsService,
@@ -140,31 +141,73 @@ export class ModelsService {
     const page = Number(urlQuery.page ?? 0);
     const pageSize = Number(urlQuery.pageSize ?? 25);
     const q = urlQuery.q;
+    const formats = urlQuery.formats?.split(',') ?? false;
+    const triangleCountOption = urlQuery.triangleCountOption ?? false;
+    const match = [
+      [node('node'), relation('in', '', 'UPLOADED'), node('user', 'User')],
+    ];
+    let whereClause = undefined;
     if (!q) {
       throw new BadRequestException('Search term is required');
     }
-    const { query, params } = new Query()
+    if (formats) {
+      match.push([
+        node('node'),
+        relation('out', '', 'HAS_FILE'),
+        node('f', 'File'),
+      ]);
+    }
+    let builder = new Query()
       .raw(
         'CALL db.index.fulltext.queryNodes("modelNamesAndDescriptions", $q) YIELD node',
         { q },
       )
       .with('node')
-      .match([
-        node('node'),
-        relation('in', '', 'UPLOADED'),
-        node('user', 'User'),
-      ])
+      .match(match);
+    if (formats) {
+      if (!whereClause) {
+        whereClause = { f: { type: formats } };
+      } else if (!whereClause.f) {
+        whereClause.f = { type: formats };
+      } else {
+        whereClause.f.type = formats;
+      }
+    }
+    if (triangleCountOption) {
+      if (!whereClause) {
+        whereClause = {
+          node: {
+            totalTriangleCount: lessEqualTo(
+              this.triangleCounts[triangleCountOption],
+            ),
+          },
+        };
+      } else if (!whereClause.node) {
+        whereClause.node = {
+          totalTriangleCount: lessEqualTo(
+            this.triangleCounts[triangleCountOption],
+          ),
+        };
+      } else {
+        whereClause.node.totalTriangleCount = lessEqualTo(
+          this.triangleCounts[triangleCountOption],
+        );
+      }
+    }
+    if (whereClause) {
+      builder.where(whereClause);
+    }
+    const { query, params } = builder
       .return({
         'node.slug': 'slug',
         'node.name': 'name',
         'node.images[0]': 'image',
-        'node.created_at': 'created_at',
         user: ['username'],
       })
-      .orderBy('created_at', 'DESC')
       .skip(page * pageSize)
       .limit(pageSize)
       .buildQueryObject();
+    console.log(query, params);
     const response = await this.neo4jService.read(query, params);
     const result: StrippedModelWithUsername[] = response.records.map((record) =>
       parseRecord(record),

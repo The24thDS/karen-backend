@@ -46,7 +46,6 @@ export class ModelsController {
   @UseGuards(OptionalAuthGuard)
   @Get(':slug')
   findOne(@Request() req, @Param('slug') slug: string) {
-    console.log('here?');
     this.modelsService.incrementViews(slug);
     return this.modelsService.findOneWithUser(slug, req.user?.id);
   }

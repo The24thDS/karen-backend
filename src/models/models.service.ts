@@ -141,7 +141,9 @@ export class ModelsService {
     const page = Number(urlQuery.page ?? 0);
     const pageSize = Number(urlQuery.pageSize ?? 25);
     const q = urlQuery.q;
-    const formats = urlQuery.formats?.split(',') ?? false;
+    const formats =
+      urlQuery.formats?.split(',')?.filter((f: string) => f.length) ?? false;
+    console.log(formats);
     const triangleCountOption = urlQuery.triangleCountOption ?? false;
     const match = [
       [node('node'), relation('in', '', 'UPLOADED'), node('user', 'User')],
@@ -150,7 +152,7 @@ export class ModelsService {
     if (!q) {
       throw new BadRequestException('Search term is required');
     }
-    if (formats) {
+    if (formats?.length) {
       match.push([
         node('node'),
         relation('out', '', 'HAS_FILE'),
@@ -164,7 +166,7 @@ export class ModelsService {
       )
       .with('node')
       .match(match);
-    if (formats) {
+    if (formats?.length) {
       if (!whereClause) {
         whereClause = { f: { type: formats } };
       } else if (!whereClause.f) {
@@ -705,5 +707,20 @@ export class ModelsService {
     });
     const { downvoted } = parseRecord(dbResponse.records[0]);
     return downvoted;
+  }
+
+  async getAvailableFormats(): Promise<string[]> {
+    const query = new Query()
+      .matchNode('f', 'File')
+      .return('collect(distinct f.type) as formats')
+      .build();
+    try {
+      const response = await this.neo4jService.read(query);
+      const data = parseRecord(response.records[0]);
+      return data;
+    } catch (e) {
+      console.log(e);
+      throw new InternalServerErrorException(e.message);
+    }
   }
 }

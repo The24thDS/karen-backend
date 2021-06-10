@@ -43,6 +43,11 @@ export class ModelsController {
     return models;
   }
 
+  @Get('formats')
+  findAvailableFormats() {
+    return this.modelsService.getAvailableFormats();
+  }
+
   @UseGuards(OptionalAuthGuard)
   @Get(':slug')
   findOne(@Request() req, @Param('slug') slug: string) {

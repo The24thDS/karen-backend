@@ -17,7 +17,6 @@ import {
 import { CreateModelDto } from './dto/create-model.dto';
 import { UpdateModelDto } from './dto/update-model.dto';
 import { ModelsService } from './models.service';
-import { SearchModelDto } from './dto/search-model-dto';
 import { VoteModelDto } from './dto/vote-model.dto';
 import { OptionalAuthGuard } from 'src/auth/optional-auth.guard';
 
@@ -35,6 +34,12 @@ export class ModelsController {
   async findAll(@Query() query) {
     const models = await this.modelsService.findAllWithUsername(query);
     return models;
+  }
+
+  @UseGuards(OptionalAuthGuard)
+  @Get('user/:username')
+  getAllForUser(@Query() query, @Param('username') username: string) {
+    return this.modelsService.findAllForUser(query, username);
   }
 
   @Get('search')

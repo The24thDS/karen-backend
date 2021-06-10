@@ -137,6 +137,38 @@ export class ModelsService {
     return parsed;
   }
 
+  async findAllForUser(
+    urlQuery,
+    username: string,
+  ): Promise<StrippedModelWithUsername[]> {
+    const page = Number(urlQuery.page ?? 0);
+    const pageSize = Number(urlQuery.pageSize ?? 25);
+    const { query, params } = new Query()
+      .match([
+        node('m', 'Model'),
+        relation('in', '', 'UPLOADED'),
+        node('user', 'User', { username }),
+      ])
+      .return({
+        m: [
+          { slug: 'slug' },
+          { name: 'name' },
+          { 'images[0]': 'image' },
+          { created_at: 'created_at' },
+        ],
+        user: ['username'],
+      })
+      .orderBy('created_at', 'DESC')
+      .skip(page * pageSize)
+      .limit(pageSize)
+      .buildQueryObject();
+    const res = await this.neo4jService.read(query, params);
+    const parsed: StrippedModelWithUsername[] = res.records.map((r) =>
+      parseRecord(r),
+    );
+    return parsed;
+  }
+
   async findBySearchTerm(urlQuery): Promise<StrippedModelWithUsername[]> {
     const page = Number(urlQuery.page ?? 0);
     const pageSize = Number(urlQuery.pageSize ?? 25);

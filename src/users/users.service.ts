@@ -22,13 +22,13 @@ export class UsersService {
       id,
       password: hashedPassword,
     };
-    const q = new Query()
+    const { query, params } = new Query()
       .create([node('user', 'User', userProps)])
       .raw('SET user.created_at = timestamp()')
       .return('user')
       .buildQueryObject();
     try {
-      const response = await this.neo4jService.write(q.query, { ...q.params });
+      const response = await this.neo4jService.write(query, params);
       const result: User = parseRecord(response.records[0]);
       const { password, ...rest } = result;
       return { ...rest, created_at: formatDate(rest.created_at) };

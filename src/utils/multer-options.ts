@@ -6,7 +6,7 @@ export const multerOptions = (dest: string = './uploads') => {
     storage: diskStorage({
       destination: dest,
       filename: (_req, file, cb) => {
-        //Calling the callback passing the random name generated with the original extension name
+        //Calling the callback passing the random name generated with the original name and extension
         cb(null, `${uuidv4()}_${file.originalname}`);
       },
     }),

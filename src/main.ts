@@ -13,6 +13,7 @@ async function bootstrap() {
       cert: fs.readFileSync(process.env.SSL_CERT_PATH),
     };
     app = await NestFactory.create(AppModule, {
+      cors: true,
       httpsOptions,
     });
   } else {

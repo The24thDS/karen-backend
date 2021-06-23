@@ -175,7 +175,6 @@ export class ModelsService {
     const q = urlQuery.q;
     const formats =
       urlQuery.formats?.split(',')?.filter((f: string) => f.length) ?? false;
-    console.log(formats);
     const triangleCountOption = urlQuery.triangleCountOption ?? false;
     const match = [
       [node('node'), relation('in', '', 'UPLOADED'), node('user', 'User')],
@@ -241,7 +240,6 @@ export class ModelsService {
       .skip(page * pageSize)
       .limit(pageSize)
       .buildQueryObject();
-    console.log(query, params);
     const response = await this.neo4jService.read(query, params);
     const result: StrippedModelWithUsername[] = response.records.map((record) =>
       parseRecord(record),
@@ -687,7 +685,6 @@ export class ModelsService {
       .return({ 'count(*)': 'count' })
       .buildQueryObject();
     const dbResponse = await this.neo4jService.read(q.query, q.params);
-    console.log(dbResponse.records[0]);
     const count = parseRecord(dbResponse.records[0]);
     return !!count;
   }
